@@ -1,0 +1,12 @@
+{
+  "name": "typescript-lsp",
+  "displayName": "TypeScript/JavaScript Language Server",
+  "description": "TypeScript and JavaScript language server for Node.js, React, and web projects in Google Antigravity.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Check TypeScript/JavaScript Language Server status and server diagnostics",
+    "Find references and definitions in .ts files",
+    "Run type checking and code analysis with typescript-language-server"
+  ]
+}

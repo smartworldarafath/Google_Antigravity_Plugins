@@ -1,0 +1,12 @@
+{
+  "name": "rust-analyzer-lsp",
+  "displayName": "Rust Language Server (rust-analyzer)",
+  "description": "rust-analyzer language server for Rust projects in Google Antigravity.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Check Rust Language Server (rust-analyzer) status and server diagnostics",
+    "Find references and definitions in .rs files",
+    "Run type checking and code analysis with rust-analyzer"
+  ]
+}

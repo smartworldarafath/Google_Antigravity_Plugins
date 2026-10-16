@@ -1,0 +1,12 @@
+{
+  "name": "fakechat",
+  "displayName": "Fakechat",
+  "description": "Localhost iMessage-style web chat for Google Antigravity — test surface with file upload and edits. No tokens, no access control.",
+  "version": "0.0.1",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Fakechat capabilities",
+    "Execute Fakechat standard workflow",
+    "Review configuration and settings for Fakechat"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "name": "asana",
+  "displayName": "Asana",
+  "description": "Asana project management integration. Connects Google Antigravity to Asana's V2 MCP server (https://mcp.asana.com/v2/mcp) to create and manage tasks, search projects, update assignments, and track progress. Requires a one-time setup of your own Asana OAuth app — run /asana-setup after installing.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Asana capabilities",
+    "Execute Asana standard workflow",
+    "Review configuration and settings for Asana"
+  ]
+}

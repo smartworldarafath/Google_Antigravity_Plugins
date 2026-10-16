@@ -1,0 +1,12 @@
+{
+  "name": "code-modernization",
+  "displayName": "Code Modernization",
+  "description": "Guided modernization for any legacy codebase: start with /modernize, get an assessment, an interactive map, the business rules mined from the code, and a plan you approve, then an upgrade, a rewrite or a rebuild with independent proof that the new code behaves like the old. Includes security hardening, a one-page report, specialist agents, and an optional live progress pane (early access).",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Code Modernization capabilities",
+    "Execute Code Modernization standard workflow",
+    "Review configuration and settings for Code Modernization"
+  ]
+}

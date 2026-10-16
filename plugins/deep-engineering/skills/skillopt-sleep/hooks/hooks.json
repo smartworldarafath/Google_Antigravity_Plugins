@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionEnd": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/on-session-end.sh\"",
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "cwc-makers",
+  "displayName": "Cwc Makers",
+  "description": "Seamless onboarding for the Code-with-Antigravity Makers Cardputer: one /maker-setup command clones the build-with-claude repo, flashes UIFlow firmware, and installs the Antigravity Buddy app bundle onto a freshly-plugged-in M5Stack Cardputer-Adv.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Cwc Makers capabilities",
+    "Execute Cwc Makers standard workflow",
+    "Review configuration and settings for Cwc Makers"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "name": "mcp-server-dev",
+  "displayName": "Mcp Server Dev",
+  "description": "Skills for designing and building MCP servers that work seamlessly with Antigravity — guides you through deployment models (remote HTTP, MCPB, local), tool design patterns, auth, and interactive MCP apps.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Mcp Server Dev capabilities",
+    "Execute Mcp Server Dev standard workflow",
+    "Review configuration and settings for Mcp Server Dev"
+  ]
+}

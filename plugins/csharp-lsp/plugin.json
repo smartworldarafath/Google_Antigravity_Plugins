@@ -1,0 +1,12 @@
+{
+  "name": "csharp-lsp",
+  "displayName": "C# Language Server",
+  "description": "C# language server integration for Google Antigravity, providing semantic analysis, completions, and Roslyn diagnostics.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Check C# Language Server status and server diagnostics",
+    "Find references and definitions in .cs files",
+    "Run type checking and code analysis with csharp-ls"
+  ]
+}

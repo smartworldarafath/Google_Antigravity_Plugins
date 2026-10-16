@@ -1,0 +1,12 @@
+{
+  "name": "lua-lsp",
+  "displayName": "Lua Language Server",
+  "description": "Lua language server for Lua scripting, Game dev, and Neovim development in Google Antigravity.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Check Lua Language Server status and server diagnostics",
+    "Find references and definitions in .lua files",
+    "Run type checking and code analysis with lua-language-server"
+  ]
+}

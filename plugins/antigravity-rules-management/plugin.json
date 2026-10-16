@@ -1,0 +1,12 @@
+{
+  "name": "antigravity-rules-management",
+  "displayName": "Antigravity Rules Management",
+  "description": "Tools to maintain and improve AGENTS.md files - audit quality, capture session learnings, and keep project memory current.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Antigravity Rules Management capabilities",
+    "Execute Antigravity Rules Management standard workflow",
+    "Review configuration and settings for Antigravity Rules Management"
+  ]
+}

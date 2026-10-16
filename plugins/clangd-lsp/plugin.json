@@ -1,0 +1,12 @@
+{
+  "name": "clangd-lsp",
+  "displayName": "C/C++ Language Server (Clangd)",
+  "description": "C/C++ language server (clangd) integration for Google Antigravity, providing AST diagnostics, code intelligence, and formatting.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Check C/C++ Language Server (Clangd) status and server diagnostics",
+    "Find references and definitions in .c files",
+    "Run type checking and code analysis with clangd"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "name": "open-code-review",
+  "displayName": "Open Code Review (OCR)",
+  "description": "Alibaba's enterprise AI code review engine. Reviews git changes, pull requests, and commits with multi-language rule engines (Go, Java, Python, TS/JS, Rust, C/C++, Swift, etc.).",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Review git staged and unstaged changes for bugs and security",
+    "Review pull request comparing against main branch",
+    "Check language-specific code review rules"
+  ]
+}

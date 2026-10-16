@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "imessage": {
+      "command": "bun",
+      "args": [
+        "run",
+        "--cwd",
+        "${CLAUDE_PLUGIN_ROOT}",
+        "--shell=bun",
+        "--silent",
+        "start"
+      ]
+    }
+  }
+}

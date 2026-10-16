@@ -1,0 +1,12 @@
+{
+  "name": "security-guidance",
+  "displayName": "Security Guidance",
+  "description": "Security review for Antigravity-generated code. Pattern-based warnings on edits, LLM-powered diff review on Stop, and an agentic commit reviewer that catches injection, XSS, SSRF, hardcoded secrets, and 25+ other vulnerability classes.",
+  "version": "2.0.14",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Security Guidance capabilities",
+    "Execute Security Guidance standard workflow",
+    "Review configuration and settings for Security Guidance"
+  ]
+}

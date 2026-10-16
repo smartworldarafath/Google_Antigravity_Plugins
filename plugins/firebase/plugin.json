@@ -1,0 +1,12 @@
+{
+  "name": "firebase",
+  "displayName": "Firebase",
+  "description": "Google Firebase MCP integration. Manage Firestore databases, authentication, cloud functions, hosting, and storage. Build and manage your Firebase backend directly from your development workflow.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Firebase capabilities",
+    "Execute Firebase standard workflow",
+    "Review configuration and settings for Firebase"
+  ]
+}

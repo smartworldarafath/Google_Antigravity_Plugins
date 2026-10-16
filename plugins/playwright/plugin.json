@@ -1,0 +1,12 @@
+{
+  "name": "playwright",
+  "displayName": "Playwright",
+  "description": "Browser automation and end-to-end testing MCP server by Microsoft. Enables Antigravity to interact with web pages, take screenshots, fill forms, click elements, and perform automated browser testing workflows.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Playwright capabilities",
+    "Execute Playwright standard workflow",
+    "Review configuration and settings for Playwright"
+  ]
+}

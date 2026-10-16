@@ -1,0 +1,12 @@
+{
+  "name": "pr-review-toolkit",
+  "displayName": "Pr Review Toolkit",
+  "description": "Comprehensive PR review agents specializing in comments, tests, error handling, type design, code quality, and code simplification",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Pr Review Toolkit capabilities",
+    "Execute Pr Review Toolkit standard workflow",
+    "Review configuration and settings for Pr Review Toolkit"
+  ]
+}

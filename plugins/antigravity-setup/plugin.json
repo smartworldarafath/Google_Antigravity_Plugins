@@ -1,0 +1,12 @@
+{
+  "name": "antigravity-setup",
+  "displayName": "Antigravity Setup",
+  "description": "Analyze codebases and recommend tailored Google Antigravity automations such as hooks, skills, MCP servers, and subagents.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Antigravity Setup capabilities",
+    "Execute Antigravity Setup standard workflow",
+    "Review configuration and settings for Antigravity Setup"
+  ]
+}

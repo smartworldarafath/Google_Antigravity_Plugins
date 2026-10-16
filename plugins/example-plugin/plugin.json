@@ -1,0 +1,12 @@
+{
+  "name": "example-plugin",
+  "displayName": "Example Plugin",
+  "description": "A comprehensive example plugin demonstrating all Google Antigravity extension options including commands, agents, skills, hooks, and MCP servers",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Example Plugin capabilities",
+    "Execute Example Plugin standard workflow",
+    "Review configuration and settings for Example Plugin"
+  ]
+}

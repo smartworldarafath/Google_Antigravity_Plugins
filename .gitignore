@@ -1,0 +1,21 @@
+# Ignore reference clone directory used during transpilation
+_reference/
+
+# Python cache and environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary task logs and scratch
+*.log
+/tmp/

@@ -1,0 +1,12 @@
+{
+  "name": "telegram",
+  "displayName": "Telegram",
+  "description": "Telegram channel for Google Antigravity — messaging bridge with built-in access control. Manage pairing, allowlists, and policy via /telegram:access.",
+  "version": "0.0.7",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Telegram capabilities",
+    "Execute Telegram standard workflow",
+    "Review configuration and settings for Telegram"
+  ]
+}

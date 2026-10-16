@@ -1,0 +1,12 @@
+{
+  "name": "github",
+  "displayName": "Github",
+  "description": "Official GitHub MCP server for repository management. Create issues, manage pull requests, review code, search repositories, and interact with GitHub's full API directly from Google Antigravity.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Github capabilities",
+    "Execute Github standard workflow",
+    "Review configuration and settings for Github"
+  ]
+}

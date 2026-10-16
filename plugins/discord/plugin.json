@@ -1,0 +1,12 @@
+{
+  "name": "discord",
+  "displayName": "Discord",
+  "description": "Discord channel for Google Antigravity — messaging bridge with built-in access control. Manage pairing, allowlists, and policy via /discord:access.",
+  "version": "0.0.4",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Discord capabilities",
+    "Execute Discord standard workflow",
+    "Review configuration and settings for Discord"
+  ]
+}

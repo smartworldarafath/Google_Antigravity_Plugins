@@ -1,0 +1,16 @@
+{
+  "description": "Security reminder hook that warns about security anti-patterns in replace_file_content/write_to_file/MultiEdit operations before they happen. Catches command injection, XSS, SQL injection, unsafe deserialization, GitHub Actions injection, and 12 other common vulnerability patterns.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "replace_file_content|write_to_file|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/security_reminder_hook.py\""
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "math-olympiad",
+  "displayName": "Math Olympiad",
+  "description": "Solve competition math (IMO, Putnam, USAMO) with adversarial verification that catches what self-verification misses. Fresh-context verifiers attack proofs with specific failure patterns. Calibrated abstention over bluffing.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Math Olympiad capabilities",
+    "Execute Math Olympiad standard workflow",
+    "Review configuration and settings for Math Olympiad"
+  ]
+}

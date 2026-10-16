@@ -1,0 +1,12 @@
+{
+  "name": "serena",
+  "displayName": "Serena",
+  "description": "Semantic code analysis MCP server providing intelligent code understanding, refactoring suggestions, and codebase navigation through language server protocol integration.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Serena capabilities",
+    "Execute Serena standard workflow",
+    "Review configuration and settings for Serena"
+  ]
+}

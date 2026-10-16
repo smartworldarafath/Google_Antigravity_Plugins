@@ -1,0 +1,12 @@
+{
+  "name": "jdtls-lsp",
+  "displayName": "Java Language Server (Eclipse JDT.LS)",
+  "description": "Eclipse JDT.LS language server for Java projects in Google Antigravity.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Check Java Language Server (Eclipse JDT.LS) status and server diagnostics",
+    "Find references and definitions in .java files",
+    "Run type checking and code analysis with jdtls"
+  ]
+}

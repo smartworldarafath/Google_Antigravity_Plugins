@@ -1,0 +1,12 @@
+{
+  "name": "swift-lsp",
+  "displayName": "Swift Language Server (SourceKit-LSP)",
+  "description": "SourceKit-LSP language server for Swift and Apple platform development in Google Antigravity.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Check Swift Language Server (SourceKit-LSP) status and server diagnostics",
+    "Find references and definitions in .swift files",
+    "Run type checking and code analysis with sourcekit-lsp"
+  ]
+}

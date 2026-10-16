@@ -1,0 +1,1481 @@
+{
+  "$schema": "https://antigravity.google.com/marketplace.schema.json",
+  "name": "google-antigravity-plugins",
+  "displayName": "Google Antigravity Plugins Directory",
+  "description": "Comprehensive, production-ready plugins and skills directory for Google Antigravity.",
+  "owner": {
+    "name": "smartworldarafath",
+    "url": "https://github.com/smartworldarafath/Google_Antigravity_Plugins"
+  },
+  "totalPlugins": 60,
+  "plugins": [
+    {
+      "name": "agent-sdk-dev",
+      "displayName": "Agent Sdk Dev",
+      "description": "Antigravity Agent SDK Development Plugin",
+      "version": "1.0.0",
+      "source": "./plugins/agent-sdk-dev",
+      "logo": "plugins/agent-sdk-dev/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Agent Sdk Dev capabilities",
+        "Execute Agent Sdk Dev standard workflow",
+        "Review configuration and settings for Agent Sdk Dev"
+      ],
+      "capabilities": {
+        "skills": [
+          "new-sdk-app"
+        ],
+        "agents": [
+          "agent-sdk-verifier-py",
+          "agent-sdk-verifier-ts"
+        ],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "antigravity-plugin-dev",
+      "displayName": "Antigravity Plugin Dev",
+      "description": "Plugin development toolkit with skills for creating agents, commands, hooks, MCP integrations, and comprehensive plugin structure guidance",
+      "version": "1.0.0",
+      "source": "./plugins/antigravity-plugin-dev",
+      "logo": "plugins/antigravity-plugin-dev/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Antigravity Plugin Dev capabilities",
+        "Execute Antigravity Plugin Dev standard workflow",
+        "Review configuration and settings for Antigravity Plugin Dev"
+      ],
+      "capabilities": {
+        "skills": [
+          "agent-development",
+          "command-development",
+          "create-plugin",
+          "hook-development",
+          "mcp-integration",
+          "plugin-settings",
+          "plugin-structure",
+          "skill-development"
+        ],
+        "agents": [
+          "agent-creator",
+          "plugin-validator",
+          "skill-reviewer"
+        ],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "antigravity-rules-management",
+      "displayName": "Antigravity Rules Management",
+      "description": "Tools to maintain and improve AGENTS.md files - audit quality, capture session learnings, and keep project memory current.",
+      "version": "1.0.0",
+      "source": "./plugins/antigravity-rules-management",
+      "logo": "plugins/antigravity-rules-management/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Antigravity Rules Management capabilities",
+        "Execute Antigravity Rules Management standard workflow",
+        "Review configuration and settings for Antigravity Rules Management"
+      ],
+      "capabilities": {
+        "skills": [
+          "claude-md-improver",
+          "revise-claude-md"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "antigravity-security",
+      "displayName": "Antigravity Security",
+      "description": "Deep vulnerability scanning of your own code, run entirely inside your Google Antigravity session at a chosen effort tier, with every finding challenged before it is reported and the verification tally computed in code. Turns surviving findings into targeted patches, each verified by a panel of agents, that you apply when you choose. See the plugin README for the tiers, the report format, and the trust model.",
+      "version": "0.12.0",
+      "source": "./plugins/antigravity-security",
+      "logo": "plugins/antigravity-security/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Antigravity Security capabilities",
+        "Execute Antigravity Security standard workflow",
+        "Review configuration and settings for Antigravity Security"
+      ],
+      "capabilities": {
+        "skills": [
+          "claude-security"
+        ],
+        "agents": [
+          "claude-security",
+          "explore",
+          "patch-generator",
+          "patch-verifier",
+          "scan-inventory",
+          "scan-loader",
+          "scan-redactor",
+          "scan-researcher",
+          "scan-verifier"
+        ],
+        "hasMcp": false,
+        "hasHooks": true,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "antigravity-setup",
+      "displayName": "Antigravity Setup",
+      "description": "Analyze codebases and recommend tailored Google Antigravity automations such as hooks, skills, MCP servers, and subagents.",
+      "version": "1.0.0",
+      "source": "./plugins/antigravity-setup",
+      "logo": "plugins/antigravity-setup/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Antigravity Setup capabilities",
+        "Execute Antigravity Setup standard workflow",
+        "Review configuration and settings for Antigravity Setup"
+      ],
+      "capabilities": {
+        "skills": [
+          "claude-automation-recommender"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "asana",
+      "displayName": "Asana",
+      "description": "Asana project management integration. Connects Google Antigravity to Asana's V2 MCP server (https://mcp.asana.com/v2/mcp) to create and manage tasks, search projects, update assignments, and track progress. Requires a one-time setup of your own Asana OAuth app — run /asana-setup after installing.",
+      "version": "1.0.0",
+      "source": "./plugins/asana",
+      "logo": "plugins/asana/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Asana capabilities",
+        "Execute Asana standard workflow",
+        "Review configuration and settings for Asana"
+      ],
+      "capabilities": {
+        "skills": [
+          "asana-setup"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "clangd-lsp",
+      "displayName": "C/C++ Language Server (Clangd)",
+      "description": "C/C++ language server (clangd) integration for Google Antigravity, providing AST diagnostics, code intelligence, and formatting.",
+      "version": "1.0.0",
+      "source": "./plugins/clangd-lsp",
+      "logo": "plugins/clangd-lsp/assets/logo.svg",
+      "suggestedPrompts": [
+        "Check C/C++ Language Server (Clangd) status and server diagnostics",
+        "Find references and definitions in .c files",
+        "Run type checking and code analysis with clangd"
+      ],
+      "capabilities": {
+        "skills": [
+          "clangd-lsp"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "code-modernization",
+      "displayName": "Code Modernization",
+      "description": "Guided modernization for any legacy codebase: start with /modernize, get an assessment, an interactive map, the business rules mined from the code, and a plan you approve, then an upgrade, a rewrite or a rebuild with independent proof that the new code behaves like the old. Includes security hardening, a one-page report, specialist agents, and an optional live progress pane (early access).",
+      "version": "1.0.0",
+      "source": "./plugins/code-modernization",
+      "logo": "plugins/code-modernization/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Code Modernization capabilities",
+        "Execute Code Modernization standard workflow",
+        "Review configuration and settings for Code Modernization"
+      ],
+      "capabilities": {
+        "skills": [
+          "modernize",
+          "modernize-assess",
+          "modernize-brief",
+          "modernize-extract-rules",
+          "modernize-harden",
+          "modernize-map",
+          "modernize-preflight",
+          "modernize-reimagine",
+          "modernize-review",
+          "modernize-status",
+          "modernize-transform",
+          "modernize-uplift",
+          "modernize-verify"
+        ],
+        "agents": [
+          "architecture-critic",
+          "business-rules-extractor",
+          "legacy-analyst",
+          "scaffolder",
+          "security-auditor",
+          "test-engineer",
+          "uplift-migrator",
+          "version-delta-analyst"
+        ],
+        "hasMcp": false,
+        "hasHooks": true,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "code-review",
+      "displayName": "Code Review",
+      "description": "Automated code review for pull requests using multiple specialized agents with confidence-based scoring",
+      "version": "1.0.0",
+      "source": "./plugins/code-review",
+      "logo": "plugins/code-review/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Code Review capabilities",
+        "Execute Code Review standard workflow",
+        "Review configuration and settings for Code Review"
+      ],
+      "capabilities": {
+        "skills": [
+          "code-review"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "code-simplifier",
+      "displayName": "Code Simplifier",
+      "description": "Agent that simplifies and refines code for clarity, consistency, and maintainability while preserving functionality",
+      "version": "1.0.0",
+      "source": "./plugins/code-simplifier",
+      "logo": "plugins/code-simplifier/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Code Simplifier capabilities",
+        "Execute Code Simplifier standard workflow",
+        "Review configuration and settings for Code Simplifier"
+      ],
+      "capabilities": {
+        "skills": [],
+        "agents": [
+          "code-simplifier"
+        ],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "commit-commands",
+      "displayName": "Commit Commands",
+      "description": "Streamline your git workflow with simple commands for committing, pushing, and creating pull requests",
+      "version": "1.0.0",
+      "source": "./plugins/commit-commands",
+      "logo": "plugins/commit-commands/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Commit Commands capabilities",
+        "Execute Commit Commands standard workflow",
+        "Review configuration and settings for Commit Commands"
+      ],
+      "capabilities": {
+        "skills": [
+          "clean-gone",
+          "commit",
+          "commit-push-pr"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "context7",
+      "displayName": "Context7",
+      "description": "Upstash Context7 MCP server for up-to-date documentation lookup. Connects to Context7's hosted remote MCP server (https://mcp.context7.com/mcp) — no local Node.js or npx required — to pull version-specific documentation and code examples directly from source repositories into your LLM context. Authenticate with Context7 when prompted.",
+      "version": "1.0.0",
+      "source": "./plugins/context7",
+      "logo": "plugins/context7/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Context7 capabilities",
+        "Execute Context7 standard workflow",
+        "Review configuration and settings for Context7"
+      ],
+      "capabilities": {
+        "skills": [],
+        "agents": [],
+        "hasMcp": true,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "csharp-lsp",
+      "displayName": "C# Language Server",
+      "description": "C# language server integration for Google Antigravity, providing semantic analysis, completions, and Roslyn diagnostics.",
+      "version": "1.0.0",
+      "source": "./plugins/csharp-lsp",
+      "logo": "plugins/csharp-lsp/assets/logo.svg",
+      "suggestedPrompts": [
+        "Check C# Language Server status and server diagnostics",
+        "Find references and definitions in .cs files",
+        "Run type checking and code analysis with csharp-ls"
+      ],
+      "capabilities": {
+        "skills": [
+          "csharp-lsp"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "cwc-makers",
+      "displayName": "Cwc Makers",
+      "description": "Seamless onboarding for the Code-with-Antigravity Makers Cardputer: one /maker-setup command clones the build-with-claude repo, flashes UIFlow firmware, and installs the Antigravity Buddy app bundle onto a freshly-plugged-in M5Stack Cardputer-Adv.",
+      "version": "1.0.0",
+      "source": "./plugins/cwc-makers",
+      "logo": "plugins/cwc-makers/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Cwc Makers capabilities",
+        "Execute Cwc Makers standard workflow",
+        "Review configuration and settings for Cwc Makers"
+      ],
+      "capabilities": {
+        "skills": [
+          "cardputer-buddy",
+          "m5-onboard",
+          "maker-setup"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "deep-engineering",
+      "displayName": "Deep Engineering Elite Skills",
+      "description": "Elite software engineering principles: Karpathy first-principles coding, zero-hallucination validation, chaos engineering, architectural tours, SLO design, and robust workflows.",
+      "version": "1.0.0",
+      "source": "./plugins/deep-engineering",
+      "logo": "plugins/deep-engineering/assets/logo.svg",
+      "suggestedPrompts": [
+        "Apply Karpathy minimalist first-principles coding",
+        "Verify code with zero-hallucination API grounding",
+        "Design Service Level Objectives (SLO) and error budgets"
+      ],
+      "capabilities": {
+        "skills": [
+          "agent-harness",
+          "agent-memory",
+          "agenthub",
+          "autoresearch-agent",
+          "behuman",
+          "book-to-skill",
+          "boost-asio-pro",
+          "caveman",
+          "chaos-engineering",
+          "claude-coach",
+          "code-tour",
+          "collab-proof",
+          "data-quality-auditor",
+          "deep-learning-book",
+          "demo-video",
+          "docker-development",
+          "feature-flags-architect",
+          "grill-me",
+          "grill-with-docs",
+          "handoff",
+          "helm-chart-builder",
+          "hivemind",
+          "human-gate",
+          "karpathy-coder",
+          "kubernetes-operator",
+          "llm-cost-optimizer",
+          "llm-wiki",
+          "memory-engineering",
+          "minimalist",
+          "prompt-governance",
+          "security-guidance",
+          "skill-doctor",
+          "skillopt-sleep",
+          "skills",
+          "slo-architect",
+          "spinning-up-deep-rl",
+          "statistical-analyst",
+          "strict-api",
+          "terraform-patterns",
+          "universal-scraping-architect",
+          "workflow-builder",
+          "write-a-skill",
+          "zero-hallucination-coder"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "discord",
+      "displayName": "Discord",
+      "description": "Discord channel for Google Antigravity — messaging bridge with built-in access control. Manage pairing, allowlists, and policy via /discord:access.",
+      "version": "0.0.4",
+      "source": "./plugins/discord",
+      "logo": "plugins/discord/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Discord capabilities",
+        "Execute Discord standard workflow",
+        "Review configuration and settings for Discord"
+      ],
+      "capabilities": {
+        "skills": [
+          "access",
+          "configure"
+        ],
+        "agents": [],
+        "hasMcp": true,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "engineering-team",
+      "displayName": "Engineering Team Suite",
+      "description": "Multi-role engineering squad skills: Playwright testing, self-improving agent loops, accessibility auditing (WCAG), Google Workspace CLI, and data warehouse engineering.",
+      "version": "1.0.0",
+      "source": "./plugins/engineering-team",
+      "logo": "plugins/engineering-team/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run Playwright end-to-end tests and capture traces",
+        "Perform accessibility (a11y) WCAG compliance audit",
+        "Execute self-improving prompt and code refinement loop"
+      ],
+      "capabilities": {
+        "skills": [
+          "a11y-audit",
+          "google-workspace-cli",
+          "playwright-pro",
+          "self-improving-agent",
+          "skills",
+          "snowflake-development"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "example-plugin",
+      "displayName": "Example Plugin",
+      "description": "A comprehensive example plugin demonstrating all Google Antigravity extension options including commands, agents, skills, hooks, and MCP servers",
+      "version": "1.0.0",
+      "source": "./plugins/example-plugin",
+      "logo": "plugins/example-plugin/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Example Plugin capabilities",
+        "Execute Example Plugin standard workflow",
+        "Review configuration and settings for Example Plugin"
+      ],
+      "capabilities": {
+        "skills": [
+          "example-command",
+          "example-skill"
+        ],
+        "agents": [],
+        "hasMcp": true,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "explanatory-output-style",
+      "displayName": "Explanatory Output Style",
+      "description": "Adds educational insights about implementation choices and codebase patterns (mimics the deprecated Explanatory output style)",
+      "version": "1.0.0",
+      "source": "./plugins/explanatory-output-style",
+      "logo": "plugins/explanatory-output-style/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Explanatory Output Style capabilities",
+        "Execute Explanatory Output Style standard workflow",
+        "Review configuration and settings for Explanatory Output Style"
+      ],
+      "capabilities": {
+        "skills": [],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": true,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "fakechat",
+      "displayName": "Fakechat",
+      "description": "Localhost iMessage-style web chat for Google Antigravity — test surface with file upload and edits. No tokens, no access control.",
+      "version": "0.0.1",
+      "source": "./plugins/fakechat",
+      "logo": "plugins/fakechat/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Fakechat capabilities",
+        "Execute Fakechat standard workflow",
+        "Review configuration and settings for Fakechat"
+      ],
+      "capabilities": {
+        "skills": [],
+        "agents": [],
+        "hasMcp": true,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "feature-dev",
+      "displayName": "Feature Dev",
+      "description": "Comprehensive feature development workflow with specialized agents for codebase exploration, architecture design, and quality review",
+      "version": "1.0.0",
+      "source": "./plugins/feature-dev",
+      "logo": "plugins/feature-dev/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Feature Dev capabilities",
+        "Execute Feature Dev standard workflow",
+        "Review configuration and settings for Feature Dev"
+      ],
+      "capabilities": {
+        "skills": [
+          "feature-dev"
+        ],
+        "agents": [
+          "code-architect",
+          "code-explorer",
+          "code-reviewer"
+        ],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "firebase",
+      "displayName": "Firebase",
+      "description": "Google Firebase MCP integration. Manage Firestore databases, authentication, cloud functions, hosting, and storage. Build and manage your Firebase backend directly from your development workflow.",
+      "version": "1.0.0",
+      "source": "./plugins/firebase",
+      "logo": "plugins/firebase/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Firebase capabilities",
+        "Execute Firebase standard workflow",
+        "Review configuration and settings for Firebase"
+      ],
+      "capabilities": {
+        "skills": [],
+        "agents": [],
+        "hasMcp": true,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "frontend-design",
+      "displayName": "Frontend Design",
+      "description": "Frontend design skill for UI/UX implementation",
+      "version": "1.0.0",
+      "source": "./plugins/frontend-design",
+      "logo": "plugins/frontend-design/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Frontend Design capabilities",
+        "Execute Frontend Design standard workflow",
+        "Review configuration and settings for Frontend Design"
+      ],
+      "capabilities": {
+        "skills": [
+          "frontend-design"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "github",
+      "displayName": "Github",
+      "description": "Official GitHub MCP server for repository management. Create issues, manage pull requests, review code, search repositories, and interact with GitHub's full API directly from Google Antigravity.",
+      "version": "1.0.0",
+      "source": "./plugins/github",
+      "logo": "plugins/github/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Github capabilities",
+        "Execute Github standard workflow",
+        "Review configuration and settings for Github"
+      ],
+      "capabilities": {
+        "skills": [],
+        "agents": [],
+        "hasMcp": true,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "gitlab",
+      "displayName": "Gitlab",
+      "description": "GitLab DevOps platform integration. Manage repositories, merge requests, CI/CD pipelines, issues, and wikis. Full access to GitLab's comprehensive DevOps lifecycle tools.",
+      "version": "1.0.0",
+      "source": "./plugins/gitlab",
+      "logo": "plugins/gitlab/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Gitlab capabilities",
+        "Execute Gitlab standard workflow",
+        "Review configuration and settings for Gitlab"
+      ],
+      "capabilities": {
+        "skills": [],
+        "agents": [],
+        "hasMcp": true,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "gopls-lsp",
+      "displayName": "Go Language Server (gopls)",
+      "description": "Go language server (gopls) integration for Google Antigravity, providing analysis, package navigation, and refactoring.",
+      "version": "1.0.0",
+      "source": "./plugins/gopls-lsp",
+      "logo": "plugins/gopls-lsp/assets/logo.svg",
+      "suggestedPrompts": [
+        "Check Go Language Server (gopls) status and server diagnostics",
+        "Find references and definitions in .go files",
+        "Run type checking and code analysis with gopls"
+      ],
+      "capabilities": {
+        "skills": [
+          "gopls-lsp"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "hookify",
+      "displayName": "Hookify",
+      "description": "Easily create hooks to prevent unwanted behaviors by analyzing conversation patterns",
+      "version": "1.0.0",
+      "source": "./plugins/hookify",
+      "logo": "plugins/hookify/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Hookify capabilities",
+        "Execute Hookify standard workflow",
+        "Review configuration and settings for Hookify"
+      ],
+      "capabilities": {
+        "skills": [
+          "configure",
+          "help",
+          "hookify",
+          "list",
+          "writing-rules"
+        ],
+        "agents": [
+          "conversation-analyzer"
+        ],
+        "hasMcp": false,
+        "hasHooks": true,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "imessage",
+      "displayName": "Imessage",
+      "description": "iMessage channel for Google Antigravity — reads chat.db directly, sends via AppleScript. Built-in access control; manage pairing, allowlists, and policy via /imessage:access.",
+      "version": "0.2.0",
+      "source": "./plugins/imessage",
+      "logo": "plugins/imessage/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Imessage capabilities",
+        "Execute Imessage standard workflow",
+        "Review configuration and settings for Imessage"
+      ],
+      "capabilities": {
+        "skills": [
+          "access",
+          "configure"
+        ],
+        "agents": [],
+        "hasMcp": true,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "jcode-performance",
+      "displayName": "JCode Performance & Swarm Optimizer",
+      "description": "High-efficiency coding agent runtime, swarm orchestration, memory budgeting, token optimization, and subagent coordination.",
+      "version": "1.0.0",
+      "source": "./plugins/jcode-performance",
+      "logo": "plugins/jcode-performance/assets/logo.svg",
+      "suggestedPrompts": [
+        "Optimize multi-agent swarm memory and token budget",
+        "Coordinate parallel subagents without race conditions",
+        "Audit context window usage and prune stale history"
+      ],
+      "capabilities": {
+        "skills": [
+          "memory-budget-optimizer",
+          "swarm-coordination"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "jdtls-lsp",
+      "displayName": "Java Language Server (Eclipse JDT.LS)",
+      "description": "Eclipse JDT.LS language server for Java projects in Google Antigravity.",
+      "version": "1.0.0",
+      "source": "./plugins/jdtls-lsp",
+      "logo": "plugins/jdtls-lsp/assets/logo.svg",
+      "suggestedPrompts": [
+        "Check Java Language Server (Eclipse JDT.LS) status and server diagnostics",
+        "Find references and definitions in .java files",
+        "Run type checking and code analysis with jdtls"
+      ],
+      "capabilities": {
+        "skills": [
+          "jdtls-lsp"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "kotlin-lsp",
+      "displayName": "Kotlin Language Server",
+      "description": "Kotlin language server for Kotlin and Android projects in Google Antigravity.",
+      "version": "1.0.0",
+      "source": "./plugins/kotlin-lsp",
+      "logo": "plugins/kotlin-lsp/assets/logo.svg",
+      "suggestedPrompts": [
+        "Check Kotlin Language Server status and server diagnostics",
+        "Find references and definitions in .kt files",
+        "Run type checking and code analysis with kotlin-lsp"
+      ],
+      "capabilities": {
+        "skills": [
+          "kotlin-lsp"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "laravel-boost",
+      "displayName": "Laravel Boost",
+      "description": "Laravel development toolkit MCP server. Provides intelligent assistance for Laravel applications including Artisan commands, Eloquent queries, routing, migrations, and framework-specific code generation.",
+      "version": "1.0.0",
+      "source": "./plugins/laravel-boost",
+      "logo": "plugins/laravel-boost/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Laravel Boost capabilities",
+        "Execute Laravel Boost standard workflow",
+        "Review configuration and settings for Laravel Boost"
+      ],
+      "capabilities": {
+        "skills": [],
+        "agents": [],
+        "hasMcp": true,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "learning-output-style",
+      "displayName": "Learning Output Style",
+      "description": "Interactive learning mode that requests meaningful code contributions at decision points (mimics the unshipped Learning output style)",
+      "version": "1.0.0",
+      "source": "./plugins/learning-output-style",
+      "logo": "plugins/learning-output-style/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Learning Output Style capabilities",
+        "Execute Learning Output Style standard workflow",
+        "Review configuration and settings for Learning Output Style"
+      ],
+      "capabilities": {
+        "skills": [],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": true,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "linear",
+      "displayName": "Linear",
+      "description": "Linear issue tracking integration. Create issues, manage projects, update statuses, search across workspaces, and streamline your software development workflow with Linear's modern issue tracker.",
+      "version": "1.0.0",
+      "source": "./plugins/linear",
+      "logo": "plugins/linear/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Linear capabilities",
+        "Execute Linear standard workflow",
+        "Review configuration and settings for Linear"
+      ],
+      "capabilities": {
+        "skills": [],
+        "agents": [],
+        "hasMcp": true,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "lua-lsp",
+      "displayName": "Lua Language Server",
+      "description": "Lua language server for Lua scripting, Game dev, and Neovim development in Google Antigravity.",
+      "version": "1.0.0",
+      "source": "./plugins/lua-lsp",
+      "logo": "plugins/lua-lsp/assets/logo.svg",
+      "suggestedPrompts": [
+        "Check Lua Language Server status and server diagnostics",
+        "Find references and definitions in .lua files",
+        "Run type checking and code analysis with lua-language-server"
+      ],
+      "capabilities": {
+        "skills": [
+          "lua-lsp"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "math-olympiad",
+      "displayName": "Math Olympiad",
+      "description": "Solve competition math (IMO, Putnam, USAMO) with adversarial verification that catches what self-verification misses. Fresh-context verifiers attack proofs with specific failure patterns. Calibrated abstention over bluffing.",
+      "version": "1.0.0",
+      "source": "./plugins/math-olympiad",
+      "logo": "plugins/math-olympiad/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Math Olympiad capabilities",
+        "Execute Math Olympiad standard workflow",
+        "Review configuration and settings for Math Olympiad"
+      ],
+      "capabilities": {
+        "skills": [
+          "math-olympiad"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "math-proof",
+      "displayName": "Math Proof",
+      "description": "Two skills for hard mathematics problems, each ending in a self-contained proof.md: /math-proof:solo has the session work the problem itself in stages with a notes file; /math-proof:siege works on it for hours in rounds of judge and worker sub-agents and says plainly what is and is not proved.",
+      "version": "1.0.0",
+      "source": "./plugins/math-proof",
+      "logo": "plugins/math-proof/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Math Proof capabilities",
+        "Execute Math Proof standard workflow",
+        "Review configuration and settings for Math Proof"
+      ],
+      "capabilities": {
+        "skills": [
+          "siege",
+          "solo"
+        ],
+        "agents": [
+          "math-proof-judge",
+          "math-proof-worker-deep",
+          "math-proof-worker"
+        ],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "mcp-server-dev",
+      "displayName": "Mcp Server Dev",
+      "description": "Skills for designing and building MCP servers that work seamlessly with Antigravity — guides you through deployment models (remote HTTP, MCPB, local), tool design patterns, auth, and interactive MCP apps.",
+      "version": "1.0.0",
+      "source": "./plugins/mcp-server-dev",
+      "logo": "plugins/mcp-server-dev/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Mcp Server Dev capabilities",
+        "Execute Mcp Server Dev standard workflow",
+        "Review configuration and settings for Mcp Server Dev"
+      ],
+      "capabilities": {
+        "skills": [
+          "build-mcp-app",
+          "build-mcp-server",
+          "build-mcpb"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "mcp-tunnels",
+      "displayName": "Mcp Tunnels",
+      "description": "Connect Antigravity to a private MCP server through an Google Antigravity Ecosystem MCP tunnel. Drives the Docker Compose quickstart end to end: certificates, proxy config, cloudflared, and a verifiable sample server.",
+      "version": "1.0.0",
+      "source": "./plugins/mcp-tunnels",
+      "logo": "plugins/mcp-tunnels/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Mcp Tunnels capabilities",
+        "Execute Mcp Tunnels standard workflow",
+        "Review configuration and settings for Mcp Tunnels"
+      ],
+      "capabilities": {
+        "skills": [
+          "create-docker-mcp-tunnel"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "open-code-review",
+      "displayName": "Open Code Review (OCR)",
+      "description": "Alibaba's enterprise AI code review engine. Reviews git changes, pull requests, and commits with multi-language rule engines (Go, Java, Python, TS/JS, Rust, C/C++, Swift, etc.).",
+      "version": "1.0.0",
+      "source": "./plugins/open-code-review",
+      "logo": "plugins/open-code-review/assets/logo.svg",
+      "suggestedPrompts": [
+        "Review git staged and unstaged changes for bugs and security",
+        "Review pull request comparing against main branch",
+        "Check language-specific code review rules"
+      ],
+      "capabilities": {
+        "skills": [
+          "open-code-review",
+          "open-code-review-delegate"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "php-lsp",
+      "displayName": "PHP Language Server (Intelephense)",
+      "description": "PHP language server integration for PHP and Laravel projects in Google Antigravity.",
+      "version": "1.0.0",
+      "source": "./plugins/php-lsp",
+      "logo": "plugins/php-lsp/assets/logo.svg",
+      "suggestedPrompts": [
+        "Check PHP Language Server (Intelephense) status and server diagnostics",
+        "Find references and definitions in .php files",
+        "Run type checking and code analysis with intelephense"
+      ],
+      "capabilities": {
+        "skills": [
+          "php-lsp"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "playground",
+      "displayName": "Playground",
+      "description": "Creates interactive HTML playgrounds — self-contained single-file explorers with visual controls, live preview, and prompt output with copy button",
+      "version": "1.0.0",
+      "source": "./plugins/playground",
+      "logo": "plugins/playground/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Playground capabilities",
+        "Execute Playground standard workflow",
+        "Review configuration and settings for Playground"
+      ],
+      "capabilities": {
+        "skills": [
+          "playground"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "playwright",
+      "displayName": "Playwright",
+      "description": "Browser automation and end-to-end testing MCP server by Microsoft. Enables Antigravity to interact with web pages, take screenshots, fill forms, click elements, and perform automated browser testing workflows.",
+      "version": "1.0.0",
+      "source": "./plugins/playwright",
+      "logo": "plugins/playwright/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Playwright capabilities",
+        "Execute Playwright standard workflow",
+        "Review configuration and settings for Playwright"
+      ],
+      "capabilities": {
+        "skills": [],
+        "agents": [],
+        "hasMcp": true,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "pr-review-toolkit",
+      "displayName": "Pr Review Toolkit",
+      "description": "Comprehensive PR review agents specializing in comments, tests, error handling, type design, code quality, and code simplification",
+      "version": "1.0.0",
+      "source": "./plugins/pr-review-toolkit",
+      "logo": "plugins/pr-review-toolkit/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Pr Review Toolkit capabilities",
+        "Execute Pr Review Toolkit standard workflow",
+        "Review configuration and settings for Pr Review Toolkit"
+      ],
+      "capabilities": {
+        "skills": [
+          "review-pr"
+        ],
+        "agents": [
+          "code-reviewer",
+          "code-simplifier",
+          "comment-analyzer",
+          "pr-test-analyzer",
+          "silent-failure-hunter",
+          "type-design-analyzer"
+        ],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "project-artifact",
+      "displayName": "Project Artifact",
+      "description": "Generate and publish a project status artifact — an opinionated, tabbed status page (overview & success criteria, the workstream sequence, next steps, plus background / plan / risks & open questions / decisions-FAQ when they earn a tab) published via the built-in Artifact tool to a default-private claude.ai page the user can share with teammates. Each artifact is backed by a per-project config, so 'refresh the artifact' re-gathers live state, redeploys the same URL, and reports only the delta. Domain-neutral, with a software specialization for projects whose workstreams are pull requests. Needs the built-in Artifact tool (claude.ai login).",
+      "version": "1.0.0",
+      "source": "./plugins/project-artifact",
+      "logo": "plugins/project-artifact/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Project Artifact capabilities",
+        "Execute Project Artifact standard workflow",
+        "Review configuration and settings for Project Artifact"
+      ],
+      "capabilities": {
+        "skills": [
+          "project-artifact"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "pyright-lsp",
+      "displayName": "Python Language Server (Pyright)",
+      "description": "Pyright static type checker and language server for Python projects in Google Antigravity.",
+      "version": "1.0.0",
+      "source": "./plugins/pyright-lsp",
+      "logo": "plugins/pyright-lsp/assets/logo.svg",
+      "suggestedPrompts": [
+        "Check Python Language Server (Pyright) status and server diagnostics",
+        "Find references and definitions in .py files",
+        "Run type checking and code analysis with pyright-langserver"
+      ],
+      "capabilities": {
+        "skills": [
+          "pyright-lsp"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "ralph-loop",
+      "displayName": "Ralph Loop",
+      "description": "Continuous self-referential AI loops for interactive iterative development, implementing the Ralph Wiggum technique. Run Antigravity in a while-true loop with the same prompt until task completion.",
+      "version": "1.0.0",
+      "source": "./plugins/ralph-loop",
+      "logo": "plugins/ralph-loop/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Ralph Loop capabilities",
+        "Execute Ralph Loop standard workflow",
+        "Review configuration and settings for Ralph Loop"
+      ],
+      "capabilities": {
+        "skills": [
+          "cancel-ralph",
+          "help",
+          "ralph-loop"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": true,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "receipts",
+      "displayName": "Receipts",
+      "description": "Receipts integration and capabilities for Google Antigravity.",
+      "version": "1.0.0",
+      "source": "./plugins/receipts",
+      "logo": "plugins/receipts/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Receipts capabilities",
+        "Execute Receipts standard workflow",
+        "Review configuration and settings for Receipts"
+      ],
+      "capabilities": {
+        "skills": [
+          "receipts"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "reverse-engineer-anything",
+      "displayName": "Reverse Engineer Anything (REA)",
+      "description": "One MCP and skill suite for reverse engineering across binaries, applications, and runtime behavior (native, JS/Electron, Android, WASM, EVM, firmware, SQLite, network captures).",
+      "version": "1.0.0",
+      "source": "./plugins/reverse-engineer-anything",
+      "logo": "plugins/reverse-engineer-anything/assets/logo.svg",
+      "suggestedPrompts": [
+        "Decompile and analyze native binary or package",
+        "Trace Electron or JavaScript application feature",
+        "Inspect Android APK classes, methods, and attack surface"
+      ],
+      "capabilities": {
+        "skills": [
+          "rea-changelog-update",
+          "rea-ci-tests-audit",
+          "rea-tool-design",
+          "reverse-engineer-anything"
+        ],
+        "agents": [],
+        "hasMcp": true,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "reverse-skill",
+      "displayName": "Reverse Skill & Security Analysis",
+      "description": "Comprehensive reverse engineering, protocol analysis, radare2 automation, binary inspection, and penetration testing playbooks.",
+      "version": "1.0.0",
+      "source": "./plugins/reverse-skill",
+      "logo": "plugins/reverse-skill/assets/logo.svg",
+      "suggestedPrompts": [
+        "Analyze protocol specification and network communication",
+        "Perform binary disassembly and symbol recovery with radare2",
+        "Execute security audit and supply chain vulnerability review"
+      ],
+      "capabilities": {
+        "skills": [
+          "api-security",
+          "apk-reverse",
+          "attack-chain",
+          "binary-diff",
+          "binary-ninja-reverse",
+          "browser-automation",
+          "browser-extension-reverse",
+          "case-review",
+          "cloud-k8s",
+          "code-audit",
+          "ctf-sandbox",
+          "database-security",
+          "diagram-generator",
+          "digital-forensics",
+          "docs-generator",
+          "dotnet-reverse",
+          "edr-bypass-re",
+          "email-security",
+          "firmware-pentest",
+          "ghidra-reverse",
+          "go-rust-reverse",
+          "hardware-security",
+          "ida-reverse",
+          "identity-federation",
+          "js-reverse",
+          "llm-security",
+          "macos-reverse",
+          "malware-analysis",
+          "mobile-reverse",
+          "ot-ics",
+          "patch-diff-exploit",
+          "pentest-tools",
+          "protocol-reverse",
+          "pwn-chain",
+          "radare2",
+          "radio-sdr",
+          "reverse-engineering",
+          "supply-chain-security",
+          "thick-client",
+          "threat-hunting",
+          "threat-intelligence",
+          "wifi-wireless",
+          "windows-ad"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "ruby-lsp",
+      "displayName": "Ruby Language Server",
+      "description": "Ruby LSP language server for Ruby and Rails projects in Google Antigravity.",
+      "version": "1.0.0",
+      "source": "./plugins/ruby-lsp",
+      "logo": "plugins/ruby-lsp/assets/logo.svg",
+      "suggestedPrompts": [
+        "Check Ruby Language Server status and server diagnostics",
+        "Find references and definitions in .rb files",
+        "Run type checking and code analysis with ruby-lsp"
+      ],
+      "capabilities": {
+        "skills": [
+          "ruby-lsp"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "rust-analyzer-lsp",
+      "displayName": "Rust Language Server (rust-analyzer)",
+      "description": "rust-analyzer language server for Rust projects in Google Antigravity.",
+      "version": "1.0.0",
+      "source": "./plugins/rust-analyzer-lsp",
+      "logo": "plugins/rust-analyzer-lsp/assets/logo.svg",
+      "suggestedPrompts": [
+        "Check Rust Language Server (rust-analyzer) status and server diagnostics",
+        "Find references and definitions in .rs files",
+        "Run type checking and code analysis with rust-analyzer"
+      ],
+      "capabilities": {
+        "skills": [
+          "rust-analyzer-lsp"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "security-guidance",
+      "displayName": "Security Guidance",
+      "description": "Security review for Antigravity-generated code. Pattern-based warnings on edits, LLM-powered diff review on Stop, and an agentic commit reviewer that catches injection, XSS, SSRF, hardcoded secrets, and 25+ other vulnerability classes.",
+      "version": "2.0.14",
+      "source": "./plugins/security-guidance",
+      "logo": "plugins/security-guidance/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Security Guidance capabilities",
+        "Execute Security Guidance standard workflow",
+        "Review configuration and settings for Security Guidance"
+      ],
+      "capabilities": {
+        "skills": [],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": true,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "serena",
+      "displayName": "Serena",
+      "description": "Semantic code analysis MCP server providing intelligent code understanding, refactoring suggestions, and codebase navigation through language server protocol integration.",
+      "version": "1.0.0",
+      "source": "./plugins/serena",
+      "logo": "plugins/serena/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Serena capabilities",
+        "Execute Serena standard workflow",
+        "Review configuration and settings for Serena"
+      ],
+      "capabilities": {
+        "skills": [],
+        "agents": [],
+        "hasMcp": true,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "session-report",
+      "displayName": "Session Report",
+      "description": "Session Report integration and capabilities for Google Antigravity.",
+      "version": "1.0.0",
+      "source": "./plugins/session-report",
+      "logo": "plugins/session-report/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Session Report capabilities",
+        "Execute Session Report standard workflow",
+        "Review configuration and settings for Session Report"
+      ],
+      "capabilities": {
+        "skills": [
+          "session-report"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "skill-creator",
+      "displayName": "Skill Creator",
+      "description": "Create new skills, improve existing skills, and measure skill performance. Use when users want to create a skill from scratch, update or optimize an existing skill, run evals to test a skill, or benchmark skill performance with variance analysis.",
+      "version": "1.0.0",
+      "source": "./plugins/skill-creator",
+      "logo": "plugins/skill-creator/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Skill Creator capabilities",
+        "Execute Skill Creator standard workflow",
+        "Review configuration and settings for Skill Creator"
+      ],
+      "capabilities": {
+        "skills": [
+          "skill-creator"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "swift-lsp",
+      "displayName": "Swift Language Server (SourceKit-LSP)",
+      "description": "SourceKit-LSP language server for Swift and Apple platform development in Google Antigravity.",
+      "version": "1.0.0",
+      "source": "./plugins/swift-lsp",
+      "logo": "plugins/swift-lsp/assets/logo.svg",
+      "suggestedPrompts": [
+        "Check Swift Language Server (SourceKit-LSP) status and server diagnostics",
+        "Find references and definitions in .swift files",
+        "Run type checking and code analysis with sourcekit-lsp"
+      ],
+      "capabilities": {
+        "skills": [
+          "swift-lsp"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "telegram",
+      "displayName": "Telegram",
+      "description": "Telegram channel for Google Antigravity — messaging bridge with built-in access control. Manage pairing, allowlists, and policy via /telegram:access.",
+      "version": "0.0.7",
+      "source": "./plugins/telegram",
+      "logo": "plugins/telegram/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Telegram capabilities",
+        "Execute Telegram standard workflow",
+        "Review configuration and settings for Telegram"
+      ],
+      "capabilities": {
+        "skills": [
+          "access",
+          "configure"
+        ],
+        "agents": [],
+        "hasMcp": true,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "terraform",
+      "displayName": "Terraform",
+      "description": "The Terraform MCP Server provides seamless integration with Terraform ecosystem, enabling advanced automation and interaction capabilities for Infrastructure as Code (IaC) development.",
+      "version": "1.0.0",
+      "source": "./plugins/terraform",
+      "logo": "plugins/terraform/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run diagnostics and inspect Terraform capabilities",
+        "Execute Terraform standard workflow",
+        "Review configuration and settings for Terraform"
+      ],
+      "capabilities": {
+        "skills": [],
+        "agents": [],
+        "hasMcp": true,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "typescript-lsp",
+      "displayName": "TypeScript/JavaScript Language Server",
+      "description": "TypeScript and JavaScript language server for Node.js, React, and web projects in Google Antigravity.",
+      "version": "1.0.0",
+      "source": "./plugins/typescript-lsp",
+      "logo": "plugins/typescript-lsp/assets/logo.svg",
+      "suggestedPrompts": [
+        "Check TypeScript/JavaScript Language Server status and server diagnostics",
+        "Find references and definitions in .ts files",
+        "Run type checking and code analysis with typescript-language-server"
+      ],
+      "capabilities": {
+        "skills": [
+          "typescript-lsp"
+        ],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    }
+  ]
+}

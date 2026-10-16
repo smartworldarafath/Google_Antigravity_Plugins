@@ -1,0 +1,12 @@
+{
+  "name": "imessage",
+  "displayName": "Imessage",
+  "description": "iMessage channel for Google Antigravity — reads chat.db directly, sends via AppleScript. Built-in access control; manage pairing, allowlists, and policy via /imessage:access.",
+  "version": "0.2.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Imessage capabilities",
+    "Execute Imessage standard workflow",
+    "Review configuration and settings for Imessage"
+  ]
+}

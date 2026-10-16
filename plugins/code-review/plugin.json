@@ -1,0 +1,12 @@
+{
+  "name": "code-review",
+  "displayName": "Code Review",
+  "description": "Automated code review for pull requests using multiple specialized agents with confidence-based scoring",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Code Review capabilities",
+    "Execute Code Review standard workflow",
+    "Review configuration and settings for Code Review"
+  ]
+}

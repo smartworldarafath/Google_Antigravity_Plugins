@@ -1,0 +1,12 @@
+{
+  "name": "gopls-lsp",
+  "displayName": "Go Language Server (gopls)",
+  "description": "Go language server (gopls) integration for Google Antigravity, providing analysis, package navigation, and refactoring.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Check Go Language Server (gopls) status and server diagnostics",
+    "Find references and definitions in .go files",
+    "Run type checking and code analysis with gopls"
+  ]
+}

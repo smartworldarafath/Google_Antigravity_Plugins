@@ -1,0 +1,12 @@
+{
+  "name": "pyright-lsp",
+  "displayName": "Python Language Server (Pyright)",
+  "description": "Pyright static type checker and language server for Python projects in Google Antigravity.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Check Python Language Server (Pyright) status and server diagnostics",
+    "Find references and definitions in .py files",
+    "Run type checking and code analysis with pyright-langserver"
+  ]
+}

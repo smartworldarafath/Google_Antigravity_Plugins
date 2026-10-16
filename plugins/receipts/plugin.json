@@ -1,0 +1,12 @@
+{
+  "name": "receipts",
+  "displayName": "Receipts",
+  "description": "Receipts integration and capabilities for Google Antigravity.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Receipts capabilities",
+    "Execute Receipts standard workflow",
+    "Review configuration and settings for Receipts"
+  ]
+}

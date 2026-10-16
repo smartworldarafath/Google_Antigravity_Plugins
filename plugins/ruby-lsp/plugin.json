@@ -1,0 +1,12 @@
+{
+  "name": "ruby-lsp",
+  "displayName": "Ruby Language Server",
+  "description": "Ruby LSP language server for Ruby and Rails projects in Google Antigravity.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Check Ruby Language Server status and server diagnostics",
+    "Find references and definitions in .rb files",
+    "Run type checking and code analysis with ruby-lsp"
+  ]
+}

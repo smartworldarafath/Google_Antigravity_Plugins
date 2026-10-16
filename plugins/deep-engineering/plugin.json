@@ -1,0 +1,12 @@
+{
+  "name": "deep-engineering",
+  "displayName": "Deep Engineering Elite Skills",
+  "description": "Elite software engineering principles: Karpathy first-principles coding, zero-hallucination validation, chaos engineering, architectural tours, SLO design, and robust workflows.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Apply Karpathy minimalist first-principles coding",
+    "Verify code with zero-hallucination API grounding",
+    "Design Service Level Objectives (SLO) and error budgets"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "name": "explanatory-output-style",
+  "displayName": "Explanatory Output Style",
+  "description": "Adds educational insights about implementation choices and codebase patterns (mimics the deprecated Explanatory output style)",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Explanatory Output Style capabilities",
+    "Execute Explanatory Output Style standard workflow",
+    "Review configuration and settings for Explanatory Output Style"
+  ]
+}

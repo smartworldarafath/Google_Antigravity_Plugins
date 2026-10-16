@@ -1,0 +1,12 @@
+{
+  "name": "linear",
+  "displayName": "Linear",
+  "description": "Linear issue tracking integration. Create issues, manage projects, update statuses, search across workspaces, and streamline your software development workflow with Linear's modern issue tracker.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Linear capabilities",
+    "Execute Linear standard workflow",
+    "Review configuration and settings for Linear"
+  ]
+}

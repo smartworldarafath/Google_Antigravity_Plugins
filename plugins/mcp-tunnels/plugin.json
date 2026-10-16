@@ -1,0 +1,12 @@
+{
+  "name": "mcp-tunnels",
+  "displayName": "Mcp Tunnels",
+  "description": "Connect Antigravity to a private MCP server through an Google Antigravity Ecosystem MCP tunnel. Drives the Docker Compose quickstart end to end: certificates, proxy config, cloudflared, and a verifiable sample server.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Mcp Tunnels capabilities",
+    "Execute Mcp Tunnels standard workflow",
+    "Review configuration and settings for Mcp Tunnels"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "name": "frontend-design",
+  "displayName": "Frontend Design",
+  "description": "Frontend design skill for UI/UX implementation",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Frontend Design capabilities",
+    "Execute Frontend Design standard workflow",
+    "Review configuration and settings for Frontend Design"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "name": "agent-sdk-dev",
+  "displayName": "Agent Sdk Dev",
+  "description": "Antigravity Agent SDK Development Plugin",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Agent Sdk Dev capabilities",
+    "Execute Agent Sdk Dev standard workflow",
+    "Review configuration and settings for Agent Sdk Dev"
+  ]
+}

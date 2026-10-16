@@ -1,0 +1,12 @@
+{
+  "name": "php-lsp",
+  "displayName": "PHP Language Server (Intelephense)",
+  "description": "PHP language server integration for PHP and Laravel projects in Google Antigravity.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Check PHP Language Server (Intelephense) status and server diagnostics",
+    "Find references and definitions in .php files",
+    "Run type checking and code analysis with intelephense"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "run_command(npx playwright*)",
+      "run_command(npx tsx*)"
+    ]
+  }
+}

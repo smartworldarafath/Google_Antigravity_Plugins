@@ -1,0 +1,12 @@
+{
+  "name": "session-report",
+  "displayName": "Session Report",
+  "description": "Session Report integration and capabilities for Google Antigravity.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run diagnostics and inspect Session Report capabilities",
+    "Execute Session Report standard workflow",
+    "Review configuration and settings for Session Report"
+  ]
+}

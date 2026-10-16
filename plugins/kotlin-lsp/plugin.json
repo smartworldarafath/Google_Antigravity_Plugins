@@ -1,0 +1,12 @@
+{
+  "name": "kotlin-lsp",
+  "displayName": "Kotlin Language Server",
+  "description": "Kotlin language server for Kotlin and Android projects in Google Antigravity.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Check Kotlin Language Server status and server diagnostics",
+    "Find references and definitions in .kt files",
+    "Run type checking and code analysis with kotlin-lsp"
+  ]
+}

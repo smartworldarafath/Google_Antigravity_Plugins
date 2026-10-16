@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "write_to_file|replace_file_content",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/validate-test.sh\""
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/detect-playwright.sh\""
+          }
+        ]
+      }
+    ]
+  }
+}
