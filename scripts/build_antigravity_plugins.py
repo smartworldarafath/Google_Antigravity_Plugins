@@ -1077,16 +1077,7 @@ def main():
                 target_name = PLUGIN_RENAMES.get(item, item)
                 process_standard_plugin(ipath, target_name, category="external")
 
-    # 3. Reference Plugins
-    print("\n--- Processing Reference Skills & Engines ---")
-    build_rea_plugin()
-    build_jcode_plugin()
-    build_open_code_review_plugin()
-    build_reverse_skill_plugin()
-    build_engineering_team_plugin()
-    build_deep_engineering_plugin()
-
-    # 4. Generate Master Catalog
+    # 3. Generate Master Catalog
     print("\n--- Generating Master Marketplace Catalog ---")
     generate_marketplace_and_plugins_json()
 

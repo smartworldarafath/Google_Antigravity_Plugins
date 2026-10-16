@@ -357,70 +357,6 @@
       }
     },
     {
-      "name": "deep-engineering",
-      "displayName": "Deep Engineering Elite Skills",
-      "description": "Elite software engineering principles: Karpathy first-principles coding, zero-hallucination validation, chaos engineering, architectural tours, SLO design, and robust workflows.",
-      "version": "1.0.0",
-      "source": "./plugins/deep-engineering",
-      "logo": "plugins/deep-engineering/assets/logo.svg",
-      "suggestedPrompts": [
-        "Apply Karpathy minimalist first-principles coding",
-        "Verify code with zero-hallucination API grounding",
-        "Design Service Level Objectives (SLO) and error budgets"
-      ],
-      "capabilities": {
-        "skills": [
-          "agent-harness",
-          "agent-memory",
-          "agenthub",
-          "autoresearch-agent",
-          "behuman",
-          "book-to-skill",
-          "boost-asio-pro",
-          "caveman",
-          "chaos-engineering",
-          "claude-coach",
-          "code-tour",
-          "collab-proof",
-          "data-quality-auditor",
-          "deep-learning-book",
-          "demo-video",
-          "docker-development",
-          "feature-flags-architect",
-          "grill-me",
-          "grill-with-docs",
-          "handoff",
-          "helm-chart-builder",
-          "hivemind",
-          "human-gate",
-          "karpathy-coder",
-          "kubernetes-operator",
-          "llm-cost-optimizer",
-          "llm-wiki",
-          "memory-engineering",
-          "minimalist",
-          "prompt-governance",
-          "security-guidance",
-          "skill-doctor",
-          "skillopt-sleep",
-          "skills",
-          "slo-architect",
-          "spinning-up-deep-rl",
-          "statistical-analyst",
-          "strict-api",
-          "terraform-patterns",
-          "universal-scraping-architect",
-          "workflow-builder",
-          "write-a-skill",
-          "zero-hallucination-coder"
-        ],
-        "agents": [],
-        "hasMcp": false,
-        "hasHooks": false,
-        "hasRules": true
-      }
-    },
-    {
       "name": "discord",
       "displayName": "Discord",
       "description": "Discord channel for Google Antigravity — messaging bridge with built-in access control. Manage pairing, allowlists, and policy via /discord:access.",
@@ -439,33 +375,6 @@
         ],
         "agents": [],
         "hasMcp": true,
-        "hasHooks": false,
-        "hasRules": true
-      }
-    },
-    {
-      "name": "engineering-team",
-      "displayName": "Engineering Team Suite",
-      "description": "Multi-role engineering squad skills: Playwright testing, self-improving agent loops, accessibility auditing (WCAG), Google Workspace CLI, and data warehouse engineering.",
-      "version": "1.0.0",
-      "source": "./plugins/engineering-team",
-      "logo": "plugins/engineering-team/assets/logo.svg",
-      "suggestedPrompts": [
-        "Run Playwright end-to-end tests and capture traces",
-        "Perform accessibility (a11y) WCAG compliance audit",
-        "Execute self-improving prompt and code refinement loop"
-      ],
-      "capabilities": {
-        "skills": [
-          "a11y-audit",
-          "google-workspace-cli",
-          "playwright-pro",
-          "self-improving-agent",
-          "skills",
-          "snowflake-development"
-        ],
-        "agents": [],
-        "hasMcp": false,
         "hasHooks": false,
         "hasRules": true
       }
@@ -715,29 +624,6 @@
       }
     },
     {
-      "name": "jcode-performance",
-      "displayName": "JCode Performance & Swarm Optimizer",
-      "description": "High-efficiency coding agent runtime, swarm orchestration, memory budgeting, token optimization, and subagent coordination.",
-      "version": "1.0.0",
-      "source": "./plugins/jcode-performance",
-      "logo": "plugins/jcode-performance/assets/logo.svg",
-      "suggestedPrompts": [
-        "Optimize multi-agent swarm memory and token budget",
-        "Coordinate parallel subagents without race conditions",
-        "Audit context window usage and prune stale history"
-      ],
-      "capabilities": {
-        "skills": [
-          "memory-budget-optimizer",
-          "swarm-coordination"
-        ],
-        "agents": [],
-        "hasMcp": false,
-        "hasHooks": false,
-        "hasRules": true
-      }
-    },
-    {
       "name": "jdtls-lsp",
       "displayName": "Java Language Server (Eclipse JDT.LS)",
       "description": "Eclipse JDT.LS language server for Java projects in Google Antigravity.",
@@ -959,29 +845,6 @@
       }
     },
     {
-      "name": "open-code-review",
-      "displayName": "Open Code Review (OCR)",
-      "description": "Alibaba's enterprise AI code review engine. Reviews git changes, pull requests, and commits with multi-language rule engines (Go, Java, Python, TS/JS, Rust, C/C++, Swift, etc.).",
-      "version": "1.0.0",
-      "source": "./plugins/open-code-review",
-      "logo": "plugins/open-code-review/assets/logo.svg",
-      "suggestedPrompts": [
-        "Review git staged and unstaged changes for bugs and security",
-        "Review pull request comparing against main branch",
-        "Check language-specific code review rules"
-      ],
-      "capabilities": {
-        "skills": [
-          "open-code-review",
-          "open-code-review-delegate"
-        ],
-        "agents": [],
-        "hasMcp": false,
-        "hasHooks": false,
-        "hasRules": true
-      }
-    },
-    {
       "name": "php-lsp",
       "displayName": "PHP Language Server (Intelephense)",
       "description": "PHP language server integration for PHP and Laravel projects in Google Antigravity.",
@@ -1157,95 +1020,6 @@
       "capabilities": {
         "skills": [
           "receipts"
-        ],
-        "agents": [],
-        "hasMcp": false,
-        "hasHooks": false,
-        "hasRules": true
-      }
-    },
-    {
-      "name": "reverse-engineer-anything",
-      "displayName": "Reverse Engineer Anything (REA)",
-      "description": "One MCP and skill suite for reverse engineering across binaries, applications, and runtime behavior (native, JS/Electron, Android, WASM, EVM, firmware, SQLite, network captures).",
-      "version": "1.0.0",
-      "source": "./plugins/reverse-engineer-anything",
-      "logo": "plugins/reverse-engineer-anything/assets/logo.svg",
-      "suggestedPrompts": [
-        "Decompile and analyze native binary or package",
-        "Trace Electron or JavaScript application feature",
-        "Inspect Android APK classes, methods, and attack surface"
-      ],
-      "capabilities": {
-        "skills": [
-          "rea-changelog-update",
-          "rea-ci-tests-audit",
-          "rea-tool-design",
-          "reverse-engineer-anything"
-        ],
-        "agents": [],
-        "hasMcp": true,
-        "hasHooks": false,
-        "hasRules": true
-      }
-    },
-    {
-      "name": "reverse-skill",
-      "displayName": "Reverse Skill & Security Analysis",
-      "description": "Comprehensive reverse engineering, protocol analysis, radare2 automation, binary inspection, and penetration testing playbooks.",
-      "version": "1.0.0",
-      "source": "./plugins/reverse-skill",
-      "logo": "plugins/reverse-skill/assets/logo.svg",
-      "suggestedPrompts": [
-        "Analyze protocol specification and network communication",
-        "Perform binary disassembly and symbol recovery with radare2",
-        "Execute security audit and supply chain vulnerability review"
-      ],
-      "capabilities": {
-        "skills": [
-          "api-security",
-          "apk-reverse",
-          "attack-chain",
-          "binary-diff",
-          "binary-ninja-reverse",
-          "browser-automation",
-          "browser-extension-reverse",
-          "case-review",
-          "cloud-k8s",
-          "code-audit",
-          "ctf-sandbox",
-          "database-security",
-          "diagram-generator",
-          "digital-forensics",
-          "docs-generator",
-          "dotnet-reverse",
-          "edr-bypass-re",
-          "email-security",
-          "firmware-pentest",
-          "ghidra-reverse",
-          "go-rust-reverse",
-          "hardware-security",
-          "ida-reverse",
-          "identity-federation",
-          "js-reverse",
-          "llm-security",
-          "macos-reverse",
-          "malware-analysis",
-          "mobile-reverse",
-          "ot-ics",
-          "patch-diff-exploit",
-          "pentest-tools",
-          "protocol-reverse",
-          "pwn-chain",
-          "radare2",
-          "radio-sdr",
-          "reverse-engineering",
-          "supply-chain-security",
-          "thick-client",
-          "threat-hunting",
-          "threat-intelligence",
-          "wifi-wireless",
-          "windows-ad"
         ],
         "agents": [],
         "hasMcp": false,

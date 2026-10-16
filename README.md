@@ -1,19 +1,19 @@
 <div align="center">
 
-# 🚀 Google Antigravity Plugins (Official & Community Ecosystem)
+# 🚀 Google Antigravity Official Plugins Directory
 
-**The premier, production-grade plugins, skills, agents, rules, hooks, and MCP servers repository built natively for Google Antigravity.**
+**The official-grade directory of plugins, skills, agents, rules, hooks, and MCP servers natively ported and optimized for Google Antigravity.**
 
 [![Antigravity 2.0 Compatible](https://img.shields.io/badge/Antigravity-2.0%2B%20Compatible-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://antigravity.google.com)
-[![Plugins Count](https://img.shields.io/badge/Plugins-60%20Verified-34A853?style=for-the-badge)](./plugins)
-[![Skills Count](https://img.shields.io/badge/Skills-177%2B%20Active-FBBC05?style=for-the-badge)](./plugins)
+[![Plugins Count](https://img.shields.io/badge/Plugins-54%20Verified-34A853?style=for-the-badge)](./plugins)
+[![Skills Count](https://img.shields.io/badge/Skills-77%2B%20Active-FBBC05?style=for-the-badge)](./plugins)
 [![Subagents Count](https://img.shields.io/badge/Subagents-36%20Specialized-EA4335?style=for-the-badge)](./plugins)
 [![Tests Passed](https://img.shields.io/badge/Validation-100%25%20Passed-blueviolet?style=for-the-badge)](./scripts/test_plugins.py)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](./LICENSE)
 
 <br/>
 
-[Catalog](#-plugin-catalog) • [Architecture](#-antigravity-plugin-architecture) • [Quick Start](#-quick-start--installation) • [Reference Integrations](#-reference-skills--frameworks) • [Testing](#-automated-testing--validation) • [Contributing](#-contributing)
+[Plugin Catalog](#-plugin-catalog) • [Architecture](#-antigravity-plugin-architecture) • [Quick Start & Installation](#-quick-start--installation) • [Automated Testing](#-automated-testing--validation) • [Contributing](#-contributing)
 
 </div>
 
@@ -21,32 +21,27 @@
 
 ## 🌟 Overview
 
-**`Google_Antigravity_Plugins`** is a curated, comprehensive collection of 60 first-class plugins meticulously ported, enhanced, and verified for **Google Antigravity**.
+**`Google_Antigravity_Plugins`** is a curated, production-grade directory containing **54 verified plugins** natively built and optimized for **Google Antigravity**.
 
-Originally conceived in the Claude Code ecosystem, this repository provides a **100% complete, native transpilation and expansion for Google Antigravity**. Every single plugin strictly implements the **Antigravity Customization System Specification** — packaging skills, agents, rules, hooks, and MCP servers into clean, deployable bundles.
+This repository ports and enhances the full catalog of Anthropic's official plugins directory (`claude-plugins-official`), translating every single line, configuration, agent, skill, and hook to strict **Google Antigravity Customization System Specifications**.
 
 ### 💎 Key Highlights
 
-- **100% Parity with Official Catalog**: All 40 internal plugins and 14 external plugins from Anthropic's official directory fully ported to Antigravity.
-- **Deep Reference Integrations**: Supercharged with industry-leading AI engineering and research skills:
-  - 🔍 **`reverse-engineer-anything` (REA)**: Full binary, JS/Electron, APK, WASM, and firmware reversing with MCP.
-  - ⚡ **`jcode-performance`**: Ultra-low-memory swarm coordination and context budgeting (8x–37x less RAM).
-  - 🛡️ **`open-code-review` (OCR)**: Alibaba's enterprise multi-language line-level code review engine with rule docs for 15+ languages.
-  - 🎯 **`reverse-skill`**: Automated skill extraction, radare2 automation, and security pentesting playbooks.
-  - 👥 **`engineering-team`**: Full engineering squad workflows (`playwright-pro`, `self-improving-agent`, `a11y-audit`, `google-workspace-cli`).
-  - 🧠 **`deep-engineering`**: Elite software craftsmanship (`karpathy-coder`, `zero-hallucination-coder`, `chaos-engineering`, `code-tour`, `slo-architect`).
-- **Zero Incompatible Tools**: Clean conversion of legacy `CLAUDE.md`, `Bash`, `Edit`, `Task` to native Antigravity primitives: `AGENTS.md`, `GEMINI.md`, `run_command`, `replace_file_content`, `write_to_file`, `view_file`, `invoke_subagent`, and `call_mcp_tool`.
-- **One-Command Installation**: CLI tool to install plugins into workspace (`.agents/plugins/`) or global (`~/.gemini/config/plugins/`) scopes.
+- **100% Direct Parity**: All 40 internal plugins and 14 external plugins fully transpiled into native Antigravity bundles.
+- **Antigravity Tooling & Runtime**: Legacy `CLAUDE.md`, `Bash`, `Edit`, and `Task` tools have been cleanly adapted into native Antigravity primitives: `AGENTS.md`, `GEMINI.md`, `run_command`, `replace_file_content`, `write_to_file`, `view_file`, `invoke_subagent`, and `call_mcp_tool`.
+- **Full Architecture Support**: Complete integration of Antigravity manifests (`plugin.json`), on-demand progressive disclosure skills (`skills/*/SKILL.md`), multi-model subagents (`agents/*.md`), lifecycle hooks (`hooks.json`), rules (`rules/AGENTS.md`), and Model Context Protocol servers (`mcp_config.json`).
+- **One-Command Installation**: Built-in CLI installer (`scripts/install.py`) to install plugins into workspace (`.agents/plugins/`) or machine-global (`~/.gemini/config/plugins/`) locations.
+- **100% Automated Test Coverage**: Every plugin passes rigorous schema, YAML frontmatter, path resolution, and syntax validation.
 
 ---
 
 ## 📦 Antigravity Plugin Architecture
 
-Each plugin in this repository strictly adheres to the official Antigravity folder layout:
+Every plugin in this repository adheres strictly to the official Antigravity folder hierarchy:
 
 ```text
 plugins/<plugin_name>/
-├── plugin.json         # Required: Manifest (name, displayName, description, version, logo, suggestedPrompts)
+├── plugin.json         # Required: Antigravity manifest (name, displayName, description, version, logo, suggestedPrompts)
 ├── README.md           # User documentation and usage examples
 ├── mcp_config.json     # Optional: Model Context Protocol servers exposed by the plugin
 ├── hooks.json          # Optional: PreToolUse, PostToolUse, and Stop lifecycle hooks
@@ -64,7 +59,7 @@ plugins/<plugin_name>/
 ## 📑 Plugin Catalog
 
 <details open>
-<summary><b>1. Development & Engineering (15 Plugins)</b></summary>
+<summary><b>1. Development & Workflow (12 Plugins)</b></summary>
 
 | Plugin | Version | Capabilities | Description |
 | :--- | :---: | :---: | :--- |
@@ -72,9 +67,6 @@ plugins/<plugin_name>/
 | **[`code-modernization`](./plugins/code-modernization)** | 1.0.0 | 13 Skills, 8 Agents, Hooks | Enterprise legacy migration, rule extraction, and modernization verification. |
 | **[`code-simplifier`](./plugins/code-simplifier)** | 1.0.0 | 1 Agent | Reduces cognitive complexity, simplifies control flow, and eliminates redundant abstractions. |
 | **[`commit-commands`](./plugins/commit-commands)** | 1.0.0 | 3 Skills | Smart git commit creation, PR generation, and cleanup of dead tracking branches. |
-| **[`deep-engineering`](./plugins/deep-engineering)** | 1.0.0 | 43 Skills, Rules | Karpathy first-principles coder, zero-hallucination validation, and chaos engineering. |
-| **[`engineering-team`](./plugins/engineering-team)** | 1.0.0 | 6 Skills, Rules | Playwright E2E testing, self-improving agent loops, and WCAG accessibility audits. |
-| **[`jcode-performance`](./plugins/jcode-performance)** | 1.0.0 | 2 Skills, Rules | High-efficiency coding agent runtime, swarm coordination, and context budgeting. |
 | **[`antigravity-plugin-dev`](./plugins/antigravity-plugin-dev)** | 1.0.0 | 7 Skills, 3 Agents | The definitive Antigravity Plugin & Skill authoring, testing, and validation kit. |
 | **[`skill-creator`](./plugins/skill-creator)** | 1.0.0 | 1 Skill, 3 Agents, Scripts | Benchmarking, evaluation generator, and packaging suite for Antigravity skills. |
 | **[`agent-sdk-dev`](./plugins/agent-sdk-dev)** | 1.0.0 | 1 Skill, 2 Agents | Google Antigravity & Gemini Agent SDK application scaffolding and verification. |
@@ -87,13 +79,12 @@ plugins/<plugin_name>/
 </details>
 
 <details open>
-<summary><b>2. Code Review & Quality (5 Plugins)</b></summary>
+<summary><b>2. Code Review & Security (4 Plugins)</b></summary>
 
 | Plugin | Version | Capabilities | Description |
 | :--- | :---: | :---: | :--- |
 | **[`code-review`](./plugins/code-review)** | 1.0.0 | 1 Skill | Automated PR code review using parallel Flash and Pro subagents with confidence scoring. |
 | **[`pr-review-toolkit`](./plugins/pr-review-toolkit)** | 1.0.0 | 1 Skill, 6 Agents | Elite PR review team: silent failure hunter, type design analyzer, test analyzer. |
-| **[`open-code-review`](./plugins/open-code-review)** | 1.0.0 | 2 Skills, Rule Docs | Alibaba's enterprise AI review engine with specialized rules for 15+ languages. |
 | **[`security-guidance`](./plugins/security-guidance)** | 2.0.14 | Hooks, Tests | PreToolUse security auditing, sensitive file gating, and credential leak prevention. |
 | **[`antigravity-security`](./plugins/antigravity-security)** | 0.12.0 | 1 Skill, 8 Agents, Hooks | In-depth SAST vulnerability scanner, CWE classifier, and automated patch verifier. |
 
@@ -120,17 +111,7 @@ plugins/<plugin_name>/
 </details>
 
 <details open>
-<summary><b>4. Security & Reverse Engineering (2 Plugins)</b></summary>
-
-| Plugin | Version | Capabilities | Description |
-| :--- | :---: | :---: | :--- |
-| **[`reverse-engineer-anything`](./plugins/reverse-engineer-anything)** | 1.0.0 | 4 Skills, MCP | Comprehensive binary, JS/Electron, APK, WASM, EVM, SQLite, and network reversing. |
-| **[`reverse-skill`](./plugins/reverse-skill)** | 1.0.0 | 40+ Skills, Scripts | Protocol analysis, radare2, thick-client security, firmware, and supply-chain auditing. |
-
-</details>
-
-<details open>
-<summary><b>5. MCP Servers & Cloud Integrations (14 Plugins)</b></summary>
+<summary><b>4. MCP Servers & Cloud Integrations (14 Plugins)</b></summary>
 
 | Plugin | Version | Provider / Type | Description |
 | :--- | :---: | :--- | :--- |
@@ -154,7 +135,7 @@ plugins/<plugin_name>/
 </details>
 
 <details open>
-<summary><b>6. Mathematical Reasoning, Design & Analytics (12 Plugins)</b></summary>
+<summary><b>5. Design, Mathematical Reasoning & Analytics (12 Plugins)</b></summary>
 
 | Plugin | Version | Capabilities | Description |
 | :--- | :---: | :---: | :--- |
@@ -183,7 +164,7 @@ Clone the repository and run `scripts/install.py`:
 git clone https://github.com/smartworldarafath/Google_Antigravity_Plugins.git
 cd Google_Antigravity_Plugins
 
-# List all 60 available plugins
+# List all 54 available plugins
 python scripts/install.py --list
 
 # Install a specific plugin to the current project (.agents/plugins/)
@@ -192,7 +173,7 @@ python scripts/install.py feature-dev
 # Install a specific plugin globally (~/.gemini/config/plugins/)
 python scripts/install.py code-review --scope global
 
-# Install ALL 60 plugins at once
+# Install ALL 54 plugins at once
 python scripts/install.py --all --scope global
 ```
 
@@ -216,20 +197,6 @@ To install any plugin manually, simply copy its directory from `plugins/<plugin_
 
 ---
 
-## 🔍 Reference Skills & Frameworks
-
-This repository incorporates and synthesizes patterns from world-class agentic repositories:
-
-1. **[morluto/rea](https://github.com/morluto/rea)**: Integrated into `plugins/reverse-engineer-anything` — the definitive reverse-engineering MCP toolchain.
-2. **[1jehuang/jcode](https://github.com/1jehuang/jcode)**: Integrated into `plugins/jcode-performance` — memory budgeting and multi-agent swarm orchestration.
-3. **[alibaba/open-code-review](https://github.com/alibaba/open-code-review)**: Integrated into `plugins/open-code-review` — enterprise multi-language line-level code review engine.
-4. **[zhaoxuya520/reverse-skill](https://github.com/zhaoxuya520/reverse-skill)**: Integrated into `plugins/reverse-skill` — automated skill extraction and penetration testing playbooks.
-5. **[alirezarezvani/claude-skills](https://github.com/alirezarezvani/claude-skills)**:
-   - `engineering-team`: Integrated into `plugins/engineering-team` (Playwright Pro, Self-Improving Agent, WCAG A11y, Google Workspace CLI).
-   - `engineering`: Integrated into `plugins/deep-engineering` (Karpathy Coder, Zero Hallucination, Chaos Engineering, SLO Architect).
-
----
-
 ## 🧪 Automated Testing & Validation
 
 Every plugin, skill, agent, rule, hook, and manifest in this repository is strictly validated by an automated test suite:
@@ -245,7 +212,7 @@ python scripts/test_plugins.py
 - [x] Every agent has a compliant `agents/<agent>.md` with valid frontmatter (`name`, `description`, `model`).
 - [x] All `mcp_config.json` files implement valid `mcpServers` object schemas.
 - [x] All `hooks.json` files implement Antigravity event structures (`PreToolUse`, `PostToolUse`, `Stop`).
-- [x] Master `marketplace.json` and `plugins.json` catalog all 60 plugins.
+- [x] Master `marketplace.json` and `plugins.json` catalog all 54 plugins.
 
 ---
 
