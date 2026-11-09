@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/logo.svg" alt="Google Antigravity Plugins Logo" width="128" height="128" style="border-radius: 28px;" />
+
 # 🚀 Google Antigravity Official Plugins Directory
 
 **The official-grade directory of plugins, skills, agents, rules, hooks, and MCP servers natively ported and optimized for Google Antigravity.**

@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <!-- Background Gradients -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#161B26"/>
+      <stop offset="50%" stop-color="#0E121B"/>
+      <stop offset="100%" stop-color="#080A0F"/>
+    </linearGradient>
+
+    <linearGradient id="borderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4285F4" stop-opacity="0.8"/>
+      <stop offset="35%" stop-color="#A8C7FA" stop-opacity="0.4"/>
+      <stop offset="70%" stop-color="#34A853" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#FBBC05" stop-opacity="0.6"/>
+    </linearGradient>
+
+    <!-- Radial Glows -->
+    <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#4285F4" stop-opacity="0.35"/>
+      <stop offset="60%" stop-color="#7C4DFF" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+
+    <radialGradient id="sparkGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.9"/>
+      <stop offset="30%" stop-color="#D2E3FC" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#4285F4" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Google Brand Color Gradients -->
+    <linearGradient id="gBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#70A5FD"/>
+      <stop offset="100%" stop-color="#1967D2"/>
+    </linearGradient>
+
+    <linearGradient id="gRed" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F28B82"/>
+      <stop offset="100%" stop-color="#C5221F"/>
+    </linearGradient>
+
+    <linearGradient id="gYellow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FDD663"/>
+      <stop offset="100%" stop-color="#E37400"/>
+    </linearGradient>
+
+    <linearGradient id="gGreen" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#81C995"/>
+      <stop offset="100%" stop-color="#137333"/>
+    </linearGradient>
+
+    <!-- Specular Highlight -->
+    <linearGradient id="specular" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+
+  <!-- Base Squircle with Border -->
+  <rect x="8" y="8" width="240" height="240" rx="54" fill="url(#bgGrad)" stroke="url(#borderGrad)" stroke-width="2.5" filter="url(#shadow)"/>
+
+  <!-- Top Glass Sheen -->
+  <path d="M 8 62 C 8 32.17 32.17 8 62 8 L 194 8 C 223.83 8 248 32.17 248 62 L 248 110 C 180 90 76 90 8 110 Z" fill="url(#specular)"/>
+
+  <!-- Central Ambient Glow -->
+  <circle cx="128" cy="128" r="88" fill="url(#centerGlow)"/>
+
+  <!-- Levitating Anti-Gravity Rings (Google Colors) -->
+  <g transform="translate(128, 128)" filter="url(#shadow)">
+    <!-- Orbital Upper Ring (Blue & Red) -->
+    <ellipse cx="0" cy="0" rx="76" ry="32" fill="none" stroke="url(#gBlue)" stroke-width="5" stroke-dasharray="70 45" transform="rotate(-30)"/>
+    <ellipse cx="0" cy="0" rx="76" ry="32" fill="none" stroke="url(#gRed)" stroke-width="5" stroke-dasharray="50 65" transform="rotate(30)"/>
+
+    <!-- Orbital Lower Ring (Green & Yellow) -->
+    <ellipse cx="0" cy="0" rx="82" ry="36" fill="none" stroke="url(#gGreen)" stroke-width="4.5" stroke-dasharray="60 55" transform="rotate(-75)"/>
+    <ellipse cx="0" cy="0" rx="82" ry="36" fill="none" stroke="url(#gYellow)" stroke-width="4.5" stroke-dasharray="55 60" transform="rotate(75)"/>
+
+    <!-- Floating Plugin Orbit Nodes -->
+    <!-- Top Node: Google Blue -->
+    <circle cx="0" cy="-66" r="7" fill="url(#gBlue)" stroke="#FFFFFF" stroke-width="2"/>
+    <circle cx="0" cy="-66" r="14" fill="#4285F4" fill-opacity="0.25"/>
+
+    <!-- Right Node: Google Green -->
+    <circle cx="66" cy="0" r="7" fill="url(#gGreen)" stroke="#FFFFFF" stroke-width="2"/>
+    <circle cx="66" cy="0" r="14" fill="#34A853" fill-opacity="0.25"/>
+
+    <!-- Bottom Node: Google Yellow -->
+    <circle cx="0" cy="66" r="7" fill="url(#gYellow)" stroke="#FFFFFF" stroke-width="2"/>
+    <circle cx="0" cy="66" r="14" fill="#FBBC05" fill-opacity="0.25"/>
+
+    <!-- Left Node: Google Red -->
+    <circle cx="-66" cy="0" r="7" fill="url(#gRed)" stroke="#FFFFFF" stroke-width="2"/>
+    <circle cx="-66" cy="0" r="14" fill="#EA4335" fill-opacity="0.25"/>
+
+    <!-- Center Antigravity Levitating Core Diamond -->
+    <polygon points="0,-42 36,0 0,42 -36,0" fill="#131722" stroke="url(#borderGrad)" stroke-width="2.5"/>
+
+    <!-- Core Inner Facets with Soft Shades -->
+    <polygon points="0,-42 36,0 0,0" fill="#4285F4" fill-opacity="0.35"/>
+    <polygon points="36,0 0,42 0,0" fill="#34A853" fill-opacity="0.35"/>
+    <polygon points="0,42 -36,0 0,0" fill="#FBBC05" fill-opacity="0.35"/>
+    <polygon points="-36,0 0,-42 0,0" fill="#EA4335" fill-opacity="0.35"/>
+
+    <!-- Center Four-Point Spark / Gemini Star -->
+    <path d="M 0,-24 Q 0,0 24,0 Q 0,0 0,24 Q 0,0 -24,0 Q 0,0 0,-24 Z" fill="#FFFFFF"/>
+    <circle cx="0" cy="0" r="18" fill="url(#sparkGlow)"/>
+  </g>
+</svg>
