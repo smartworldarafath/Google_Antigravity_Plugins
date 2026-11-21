@@ -61,7 +61,7 @@ def install_all(scope: str = 'project'):
 def main():
     parser = argparse.ArgumentParser(description="Google Antigravity Plugins Installer")
     parser.add_argument('plugin', nargs='?', help='Name of plugin to install (or omit to list/use flags)')
-    parser.add_argument('--all', action='store_true', help='Install all 60 plugins')
+    parser.add_argument('--all', action='store_true', help='Install all available plugins')
     parser.add_argument('--list', action='store_true', help='List all available plugins')
     parser.add_argument('--scope', choices=['project', 'global'], default='project', help='Install scope (default: project)')
 

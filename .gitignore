@@ -1,6 +1,18 @@
 # Ignore reference clone directory used during transpilation
 _reference/
 
+# Environment and secrets protection
+.env
+.env.*
+*.env
+local.properties
+credentials.json
+google-services.json
+*.key
+*.pem
+*.token
+secrets/
+
 # Python cache and environments
 __pycache__/
 *.py[cod]

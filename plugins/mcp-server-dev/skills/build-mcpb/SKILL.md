@@ -185,7 +185,7 @@ npx @anthropic-ai/mcpb pack
 # Sign for distribution
 npx @anthropic-ai/mcpb sign dist/local-files.mcpb
 
-# Install: drag the .mcpb file onto Antigravity Desktop
+# Install: drag the .mcpb file onto Antigravity Studio
 ```
 
 Test on a machine **without** your dev toolchain before shipping. "Works on my machine" failures in MCPB almost always trace to a dependency that wasn't actually bundled.

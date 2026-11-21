@@ -2,7 +2,7 @@
   "name": "learning-output-style",
   "displayName": "Learning Output Style",
   "description": "Interactive learning mode that requests meaningful code contributions at decision points (mimics the unshipped Learning output style)",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "logo": "assets/logo.svg",
   "suggestedPrompts": [
     "Run diagnostics and inspect Learning Output Style capabilities",

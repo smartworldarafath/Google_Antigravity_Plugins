@@ -13,7 +13,7 @@ Plug in your M5Stack Cardputer-Adv over USB-C, type `/maker-setup`, and Antigrav
 1. Clone [`moremas/build-with-claude`](https://github.com/moremas/build-with-claude)
 2. Detect the device, flash UIFlow 2.0 firmware, and install the Antigravity Buddy + Hello + Snake app bundle
 3. Walk you through the one physical step (the download-mode button press on the back of the device)
-4. Hand you a working pocket computer that pairs with Antigravity Desktop over BLE
+4. Hand you a working pocket computer that pairs with Antigravity Studio over BLE
 
 Then ask Antigravity to build whatever you want next — a magic 8-ball, a pixel pet, a weather ticker — and it'll write the MicroPython and push it to the device without re-flashing.
 

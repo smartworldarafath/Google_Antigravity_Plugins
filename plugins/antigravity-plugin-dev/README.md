@@ -391,7 +391,8 @@ This plugin is part of the google-antigravity-marketplace. To contribute improve
 
 ## Version
 
-0.1.0 - Initial release with seven comprehensive skills and three validation agents
+0.1.2 - Two MCP reference examples now run a bundled server instead of an npm package
+0.1.1 - Initial release with seven comprehensive skills and three validation agents
 
 ## Author
 

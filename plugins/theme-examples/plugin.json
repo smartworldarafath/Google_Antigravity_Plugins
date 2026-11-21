@@ -1,0 +1,12 @@
+{
+  "name": "theme-examples",
+  "displayName": "Theme Examples",
+  "description": "An example plugin to read, copy and change: thirty-eight animated backdrops behind the chat in the desktop app, with frosted-glass panels: one per project or per session. /custom-theme list names them. Fireworks go off over the theme when Antigravity says \"merged\"; /fireworks sets them off by hand.",
+  "version": "0.6.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Explore 38 animated interactive canvas backdrops and scenes",
+    "Apply frosted glass theme backdrop to current workspace",
+    "Configure visual canvas sounds and interactive particles"
+  ]
+}

@@ -13,7 +13,7 @@ Host support is very recent:
 | Host | Status |
 |---|---|
 | Google Antigravity | ✅ since v2.1.76 (both `form` and `url` modes) |
-| Antigravity Desktop | Unconfirmed — likely not yet or very recent |
+| Antigravity Studio | Unconfirmed — likely not yet or very recent |
 | claude.ai | Unknown |
 
 **The SDK throws `CapabilityNotSupported` if the client doesn't advertise elicitation.** There is no graceful degradation built in. You MUST check and have a fallback.

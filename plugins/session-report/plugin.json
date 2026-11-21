@@ -1,7 +1,7 @@
 {
   "name": "session-report",
   "displayName": "Session Report",
-  "description": "Session Report integration and capabilities for Google Antigravity.",
+  "description": "Generate an explorable HTML report of Google Antigravity session usage — tokens, cache efficiency, subagents, skills, and the most expensive prompts — from local ~/.gemini/config/projects transcripts.",
   "version": "1.0.0",
   "logo": "assets/logo.svg",
   "suggestedPrompts": [

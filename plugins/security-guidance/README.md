@@ -24,7 +24,7 @@ Marketplace ships enabled by default in Google Antigravity — no setup beyond h
 
 - Google Antigravity CLI ≥ v2.1.144
 - Python 3.8+ on `PATH` (`python3`, `python`, or `py -3` — the plugin picks the first that works)
-- A working API path (subscription, API key, or 3P provider config)
+- Credentials for the LLM reviews: your Google Antigravity sign-in (a Antigravity apps gateway sign-in needs Google Antigravity 2.1.195 or later), an API key, or 3P provider config (see [Credentials](#credentials))
 
 ## Configuration
 
@@ -34,8 +34,10 @@ All configuration is via environment variables. None are required for default be
 
 By default both reviews run on the newest Antigravity Opus, and move to the next one when it is released — there is no model version to bump:
 
-- The LLM diff review asks your API endpoint (`GET /v1/models`) which Opus models it serves and uses the newest. The answer is cached for a day in the plugin's state directory. If the endpoint can't answer, the review uses `claude-opus-5-5`.
-- The agentic commit reviewer, and every review on Bedrock, Vertex, and Foundry, runs through your installed Google Antigravity and uses its `opus` alias — the same model `/model opus` selects, including any `ANTHROPIC_DEFAULT_OPUS_MODEL` you have set.
+- The plugin asks your API endpoint (`GET /v1/models`) which Opus models it serves and uses the newest. The answer is cached for a day in the plugin's state directory.
+- A diff review call that fails is retried on the newest Sonnet the endpoint lists.
+- If the endpoint can't answer, the diff review uses `claude-opus-5-5` (retrying on `claude-sonnet-5-5`), and the agentic commit reviewer uses Google Antigravity's `opus` alias. When it does use the listed Opus, the agentic commit reviewer runs at medium effort unless you set `CLAUDE_CODE_EFFORT_LEVEL`.
+- The agentic commit reviewer runs through your installed Google Antigravity. Every review in a session signed in to a Antigravity apps gateway with `/login` also does, and they use Google Antigravity's `opus` and `sonnet` aliases. On Bedrock, Vertex, and Foundry reviews use those aliases too, through the copy of Google Antigravity bundled with the Agent SDK, or `SG_AGENTIC_CLI_PATH` if set. On Windows the agentic commit reviewer runs through the bundled copy too, unless `SG_AGENTIC_CLI_PATH` is set. Where the Agent SDK has no bundled copy for Windows, those reviews run through `~\.local\bin\claude.exe`, or else a `claude.exe` on `PATH`; if there is neither, set `SG_AGENTIC_CLI_PATH`. If you set `ANTHROPIC_DEFAULT_OPUS_MODEL`, the agentic commit reviewer uses the `opus` alias so that setting applies. On a gateway that alias may name an older Opus than the newest one.
 
 To pin a model, or to use a cheaper one:
 
@@ -52,6 +54,19 @@ SECURITY_REVIEW_MODEL=claude-opus-5-5
 
 `SECURITY_REVIEW_MODEL` controls the LLM diff review. `SG_AGENTIC_MODEL` (same syntax) controls the agentic commit reviewer.
 
+### Credentials
+
+The pattern warnings need no credentials. The LLM reviews (the diff review on Stop and the commit/push reviewer) use the first of these that applies:
+
+- **A cloud provider (Bedrock, Vertex, Foundry)** — if Google Antigravity is configured for one, reviews run through Google Antigravity with that provider config.
+- **`ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` in the environment** — used as is, against `ANTHROPIC_BASE_URL` if you set one. With no base URL, the commit/push reviewer treats a claude.ai token (`sk-ant-oat`) the way it treats a sign-in, below.
+- **Signed in to Google Antigravity (`/login`)** — Google Antigravity passes your sign-in to the plugin's hooks, and reviews use that account. The commit/push reviewer's Google Antigravity runs on that token alone and does not renew the login you have stored.
+- **Signed in to a Antigravity apps gateway (`/login`)** — Google Antigravity passes no sign-in to plugins on a gateway, so reviews run through your installed Google Antigravity, which uses its own stored sign-in. The plugin never reads it. The plugin looks for Google Antigravity where the native installer puts it: `~/.local/bin/claude` on macOS and Linux, `~\.local\bin\claude.exe` on Windows. For any other install, set `SG_AGENTIC_CLI_PATH` to its full path.
+
+Google Antigravity does not pass your sign-in to plugins in a session started with `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`, `DISABLE_TELEMETRY`, or `DO_NOT_TRACK` set. If no credentials reach the plugin, for that or any other reason, and the plugin cannot review through a Antigravity apps gateway sign-in, the LLM reviews are skipped and only the pattern warnings run. The plugin tells you so when Antigravity edits a file in a git repo, at most once a week. Set `ENABLE_CODE_SECURITY_REVIEW=0` if that is what you want; it also hides the notice.
+
+On the default API host, a claude.ai token (`sk-ant-oat`) that arrives as `ANTHROPIC_API_KEY`, for example from an `apiKeyHelper`, is sent as a bearer token. On hosts other than Google Antigravity, any other `ANTHROPIC_AUTH_TOKEN` is not used without a base URL, because it is meant for a gateway: set `ANTHROPIC_BASE_URL` to that gateway.
+
 ### Enabling/disabling layers
 
 | Variable | Default | What it does |
@@ -61,6 +76,8 @@ SECURITY_REVIEW_MODEL=claude-opus-5-5
 | `ENABLE_CODE_SECURITY_REVIEW=0` | on | Disable all LLM reviews (Stop hook + commit/push) |
 | `ENABLE_STOP_REVIEW=0` | on | Disable only the Stop-hook diff review, keeping commit/push reviews. Useful for multi-agent / shared-worktree setups where another agent can move HEAD between a worker's turns |
 | `ENABLE_COMMIT_REVIEW=0` | on | Disable layer 3 (agentic commit review) |
+| `MAX_COMMIT_REVIEWS_PER_HOUR=<n>` | `20` | The most commit reviews, and separately the most push reviews, that one session runs in a rolling hour. A commit or push past the limit still goes through, without a review and without a message; a later push can still review the commit. Must be a whole number; `0` runs none. It counts reviews, not tokens or cost, and does not limit the Stop-hook diff review |
+| `SECURITY_GUIDANCE_PERSIST_SESSIONS=1` | unset | Keep the reviewer's own Google Antigravity runs as session transcripts (see [Privacy and data handling](#privacy-and-data-handling)) |
 
 ### Hook output for other hosts
 
@@ -82,11 +99,15 @@ Runs two parallel review calls and unions the findings. Catches a few percentage
 
 Drop a `claude-security-guidance.md` in any of:
 
-- `~/.gemini/config/claude-security-guidance.md` — user-wide rules (when `CLAUDE_CONFIG_DIR` is set, the same file in that directory is read too)
+- `~/.gemini/config/claude-security-guidance.md` — user-wide rules (when `ANTIGRAVITY_CONFIG_DIR` is set, the same file in that directory is read too)
 - `<project>/.claude/claude-security-guidance.md` — project rules, intended to be committed
 - `<project>/.claude/claude-security-guidance.local.md` — local overrides, intended to be `.gitignore`'d
 
-All three are loaded and concatenated into the LLM diff review's prompt in the order user → project → project-local. If the combined size exceeds the 8 KB prompt budget, the tail is truncated, so user-wide rules are kept and project-local rules are dropped first. The agentic commit reviewer (layer 3) does not currently read this file. Example:
+The project files keep loading after the session moves to another folder of the project (`cd src`). A `.claude` in the folder it moved to is read too, after the project's. In a linked worktree, that worktree's own files are the project files.
+
+Project files must be regular files: a link there, or a `.claude` folder that is a link, is skipped.
+
+These are loaded and concatenated into the LLM diff review's prompt in the order user → project → project-local. If the combined size exceeds the 8 KB prompt budget, the tail is truncated, so user-wide rules are kept and project-local rules are dropped first. The agentic commit reviewer (layer 3) does not currently read this file. Example:
 
 ```markdown
 # Acme security rules
@@ -107,10 +128,13 @@ The plugin sends data to a model endpoint to perform its reviews. Specifically, 
 
 Where that data goes depends on your Google Antigravity configuration:
 - **Default (Google Antigravity Ecosystem API / subscription):** sent to `api.anthropic.com` and handled under Google Antigravity Ecosystem's [Commercial Terms](https://www.anthropic.com/legal/commercial-terms) and [Privacy Policy](https://www.anthropic.com/legal/privacy).
-- **LLM gateway** (`ANTHROPIC_BASE_URL` set): sent to your gateway URL instead, with the headers in `ANTHROPIC_CUSTOM_HEADERS` (except `anthropic-beta`). The gateway operator's terms apply.
+- **LLM gateway** (`ANTHROPIC_BASE_URL` set to a URL): sent to your gateway URL instead, with the headers in `ANTHROPIC_CUSTOM_HEADERS` (except `anthropic-beta`). The gateway operator's terms apply.
+- **Antigravity apps gateway, signed in with `/login`:** your installed Google Antigravity sends the reviews to the gateway, using its own stored sign-in. The plugin never reads the sign-in. The gateway operator's terms apply.
 - **3rd-party providers** (Bedrock / Vertex / Foundry / Mantle): sent to your configured provider endpoint. The provider's data-handling terms apply (e.g., AWS / GCP / Azure).
 
-The plugin writes its own debug log to `~/.gemini/config/security/log.txt` (override with `SECURITY_GUIDANCE_DEBUG_LOG`). The log contains diffstate metadata, finding categories, the Agent SDK's own warnings and errors, and up to 20 lines per review that the agentic reviewer's inner Google Antigravity prints to stderr — no full file contents or model prompts — and rotates at 1 MB. Nothing is uploaded.
+The plugin writes its own debug log to `~/.gemini/config/security/log.txt` (override with `SECURITY_GUIDANCE_DEBUG_LOG`). The log contains diffstate metadata, finding categories, the Agent SDK's own warnings and errors, and up to 20 lines of stderr from each Google Antigravity run the plugin starts for a review (20 in all for each agentic commit review, which starts several runs) — no full file contents or model prompts — and rotates at 1 MB. Nothing is uploaded.
+
+The agentic commit reviewer, and every review on a 3rd-party provider, runs an inner Google Antigravity through the Agent SDK. The plugin starts it with `--no-session-persistence`, so these runs are not saved as session transcripts under `~/.gemini/config/projects/`. Set `SECURITY_GUIDANCE_PERSIST_SESSIONS=1` to keep them, for example to debug a review; a saved transcript contains the full review prompt, including diff hunks, and is removed by Google Antigravity's normal session cleanup (`cleanupPeriodDays`). A Google Antigravity older than 2.0.63 does not have the flag; the review then runs without it and is saved as before.
 
 ### Review usage and cost
 
@@ -121,7 +145,7 @@ Review usage: review=stop session=<session id> model=claude-opus-5-5 calls=1 in=
 ```
 
 - `review` is `stop`, `commit` or `push`; `session` is the Google Antigravity session that triggered it.
-- `calls` counts API requests for the diff review and reviewer runs for the agentic commit/push review, where `model` is the model that was asked for (`opus` by default).
+- `calls` counts API requests for the diff review and reviewer runs for the agentic commit/push review, where `model` is the model that was asked for (`opus` if the endpoint can't list its models).
 - `est_cost_usd` is an estimate at list prices, not a bill: on a subscription the review counts against your usage limits instead. A trailing `~` means the model had no entry in the plugin's price table and a default rate was used. A review cut short (timeout, session exit) may not be counted.
 - The log rotates at 1 MB, so copy these lines out if you need a longer history.
 
@@ -135,7 +159,9 @@ This is a best-effort assistive tool, not a guarantee. Treat findings as suggest
 
 **Plugin doesn't seem to fire** — check that `~/.gemini/config/claude-security-guidance.md` (or hook activity) shows in debug logs. Run Google Antigravity with `--debug-file /tmp/claude/debug.txt` and grep for `security_reminder_hook`. The plugin also writes its own log to `~/.gemini/config/security/log.txt`.
 
-**Review never finds anything** — verify your API path works. When a commit or push review gets no usable answer from the model, Antigravity is told once per session for each kind of review and failure (for example "Commit security review did not complete: …"), and the reason is logged. If a commit whose review failed is pushed later from Google Antigravity, the push review checks it. On 3P providers, if you set `SECURITY_REVIEW_MODEL`, check it is a provider-specific id your account can invoke. On LLM gateways, check the gateway's logs for `POST /v1/messages` traffic from the plugin.
+**Looking into one commit review** — set `SECURITY_GUIDANCE_PERSIST_SESSIONS=1` before the run; the reviewer's prompt, tool calls and answer are then kept as session transcripts under `~/.gemini/config/projects/`.
+
+**Review never finds anything** — verify your API path works, and that credentials reach the plugin (see [Credentials](#credentials)): `~/.gemini/config/security/log.txt` says `no API credentials` when they don't. When a commit or push review gets no usable answer from the model, Antigravity is told once per session for each kind of review and failure (for example "Commit security review did not complete: …"), and the reason is logged. If a commit whose review failed is pushed later from Google Antigravity, the push review checks it. On 3P providers, if you set `SECURITY_REVIEW_MODEL`, check it is a provider-specific id your account can invoke. On LLM gateways, check the gateway's logs for `POST /v1/messages` traffic from the plugin. In a session signed in to a Antigravity apps gateway with `/login`, reviews run only when `claude auth status` shows the gateway and that you are logged in. They run through the Google Antigravity at `~/.local/bin/claude`, where the native installer puts it on macOS and Linux, or on Windows at `~\.local\bin\claude.exe`. For any other install, set `SG_AGENTIC_CLI_PATH` to its full path.
 
 **Too many false positives** — set `SECURITY_REVIEW_MODEL` to a cheaper model (`claude-sonnet-5-5`) and re-evaluate; if precision is the priority, stay on the default.
 

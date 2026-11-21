@@ -1,0 +1,3783 @@
+#!/usr/bin/env python3
+"""
+Security Guidance Plugin for Google Antigravity
+
+A hooks-based plugin that guides Antigravity toward writing more secure code. It runs as
+UserPromptSubmit, PostToolUse, and Stop hooks via the Google Antigravity plugin system.
+
+## Architecture
+
+The plugin has two layers:
+
+1. **Pattern-based rules (PostToolUse, every edit)**: Fast regex checks that run on
+   every file write. Detects common vulnerabilities like hardcoded secrets, SQL injection,
+   command injection, path traversal, and insecure session configs. Injects brief warnings
+   via additionalContext.
+
+2. **Stop hook (final review)**: When Antigravity finishes, uses `git diff` against a
+   baseline SHA (captured at UserPromptSubmit) to get only the code changed during the
+   session. Runs two Haiku analyses on the diff:
+   a) Concrete vulnerability scan with severity ratings
+   b) Areas-of-concern analysis identifying categories to investigate
+   Exits with code 2 to force Antigravity to continue and address findings.
+
+## How the git baseline works
+
+On each UserPromptSubmit, the plugin takes a snapshot commit to get a SHA representing
+the current working tree state (HEAD + any uncommitted changes). This SHA is saved to
+the session state file. When the Stop hook fires, it runs `git diff <baseline_sha>` to
+get only the changes made since that snapshot. After analysis, the baseline is updated
+so the next Stop hook iteration only sees new changes.
+
+This means:
+- Only code Antigravity actually changed is reviewed (not pre-existing code)
+- Mid-session commits are handled correctly (diff is against the snapshot, not HEAD)
+- Each turn only reviews new changes (baseline updates after each stop hook)
+
+## Configuration
+
+Kill switches:
+- SECURITY_GUIDANCE_DISABLE: "1" to fully disable the plugin (alias for ENABLE_SECURITY_REMINDER=0)
+- ENABLE_SECURITY_REMINDER: "0" to fully disable the plugin (legacy name)
+
+Per-feature toggles (all default enabled; set to "0" to disable):
+- ENABLE_PATTERN_RULES: PostToolUse regex warnings on replace_file_content/write_to_file
+- ENABLE_CODE_SECURITY_REVIEW: Stop-hook git-diff LLM review
+- ENABLE_COMMIT_REVIEW: PostToolUse[run_command] commit security review
+
+Other:
+- SECURITY_REVIEW_MODEL: Model for LLM review (default: the newest Opus)
+- ANTHROPIC_API_KEY: Required for LLM-based reviews
+- ANTHROPIC_AUTH_TOKEN: Alternative to API key — OAuth access token sent as Bearer auth.
+  Google Antigravity passes this to the plugin's hooks for signed-in users, unless
+  telemetry or nonessential traffic is turned off. With neither, the LLM
+  reviews are skipped and the user is told once (see README, Credentials).
+"""
+
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
+import contextlib
+import glob
+import hashlib
+import json
+import os
+import random
+import re
+import subprocess
+import sys
+import threading
+import time
+import urllib.request
+from datetime import datetime
+from enum import IntEnum
+from typing import Optional, Tuple, Dict, Any, List
+
+# review_api is the importable surface for the agentic-review prompts,
+# schemas, and pure filters.  External callers (e.g. agentic review harnesses)
+# import review_api directly so they run the same eval-covered prompts
+# without going through the CC hook protocol.  The underscored names below
+# alias into it so this script stays the single CC-hook entrypoint.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import review_api  # noqa: E402
+from _base import (  # noqa: E402,F401
+    DEBUG_LOG_FILE, DEBUG_LOG_MAX_BYTES, debug_log,
+    PROVENANCE_TAG, PROVENANCE_BANNER,
+    _read_plugin_version_int, _PV, _USAGE, _USAGE_LOCK,
+    _PRICE_PER_MTOK, _PRICE_DEFAULT, _record_usage, _usage_metrics, _net_error_metric,
+    _USAGE_CONTEXT, _log_usage,
+    launcher_direct_metric, launcher_probe_metrics, state_dir as _resolve_state_dir,
+    write_hook_output as _write_hook_output, portable_output,
+    llm_reviews_switched_off, agent_sdk_installed, make_state_dir,
+)
+import extensibility  # noqa: E402
+from patterns import (  # noqa: E402,F401
+    _JS_EXTS, _PY_EXTS, _DOC_EXTS,
+    _UNSAFE_DESERIALIZATION_REMINDER, _UNSAFE_YAML_LOAD_REMINDER,
+    _UNSAFE_TORCH_LOAD_REMINDER, SECURITY_PATTERNS, RuleId,
+    _RULE_NAME_TO_ID, rule_names_to_mask,
+)
+from session_state import (  # noqa: E402,F401
+    _state_key, get_state_file, get_lock_file, cleanup_old_state_files,
+    load_state, save_state, with_locked_state,
+)
+from gitutil import (  # noqa: E402,F401
+    GIT_CMD, apply_safe_git_env, remove_copies_on_termination,
+    on_windows_drive,
+    _git_rev_parse_head, _find_git_index, _diff_pathspec, _temp_index,
+    _git_toplevel, _git_dir, _git_rev_list_range, _git_diff_range,
+    _git_range_parents, _git_merge_resolved_files,
+    _git_toplevel_and_head, _git_head_at,
+    _detect_main_branch, _git_reflog_recent_commits, _git_name_only,
+    _git_status_porcelain, _is_ancestor, get_git_diff,
+    SOURCE_CODE_EXTENSIONS, SOURCE_CODE_BASENAMES,
+    NON_SOURCE_EXTENSIONLESS_BASENAMES, SKIP_PATH_PATTERNS,
+    SKIP_FILE_SUFFIXES, _SECURITY_RISK_PATH_TOKENS,
+    _LOW_PRIORITY_SUFFIXES, _LOW_PRIORITY_PATH_TOKENS,
+    _prioritize_diff_files, _is_reviewable_source,
+    extract_file_paths_from_diff, parse_diff_into_files,
+    filter_preexisting_from_diff, renamed_into_review,
+    came_from_secret, git_diff_unpaired,
+)
+from diffstate import (  # noqa: E402,F401
+    STOP_LOOP_STATE_TTL_SEC, PREVIOUS_FINDINGS_TTL_SEC,
+    save_baseline_sha, load_baseline_sha, record_touched_path,
+    consume_stop_state, restore_unreviewed_stop_state, record_reviewed_diff,
+    get_baseline_file_content, capture_git_baseline,
+    _REVIEWED_SHAS_BASENAME, _REVIEWED_SHAS_CAP,
+    _reviewed_shas_path, _load_reviewed_shas, _append_reviewed_shas,
+    _full_shas, _mark_inflight, _load_inflight_shas, _reviewed_after_inflight,
+    _diff_review_started, _diff_review_done,
+    UNTRACKED_BASELINE_CAP, _list_untracked, compute_v2_review_set,
+    touched_scope, review_scope_code,
+    findings_without_edit_record,
+    baseline_origin, baseline_origin_metric, FOREIGN_ORIGINS,
+    KEPT_NO_CAPTURE, KEPT_UNREVIEWED,
+)
+from reporesolve import (  # noqa: E402,F401
+    RES_NONE, RES_CWD, RES_COMMAND, RES_SHA_SCAN, RES_TOUCHED_PATHS, RES_HINT,
+    COMMIT_SUBCOMMANDS, PUSH_SUBCOMMANDS,
+    toplevel_from_command, command_in_left_out_repo, repo_containing_commit, scan_roots,
+    resolve_repo_root, save_repo_hint, load_repo_hint,
+)
+import diffstate  # noqa: E402  module ref for last_baseline_fail
+import gitutil  # noqa: E402  module ref for per-run counters
+import llm  # noqa: E402  module ref for reassignable globals (_last_call_claude_http_error etc.)
+from llm import (  # noqa: E402,F401
+    ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, HAS_API_CREDENTIALS,
+    CLAUDE_CODE_SYSTEM_PROMPT,
+    _last_call_claude_http_error,
+    ensure_anthropic_reachable,
+    _last_review_truncated_bytes, _auth_prefer_token,
+    DIFF_PER_FILE_BYTES, DIFF_TOTAL_BYTES, _AGENTIC_INVESTIGATE_SYSTEM,
+    _FINDINGS_SCHEMA, _SURVIVED_SCHEMA, _REWAKE_SUMMARY_BUDGET,
+    _cap_files_for_prompt, _build_auth_headers, _call_claude, _call_claude_dual_or,
+    _format_vulns_guidance, _format_vulns_summary, _finding_keys, _dedup_against_state,
+    analyze_code_security, _agentic_commit_review_enabled, agentic_review,
+    analyze_security_concerns,
+)
+
+# LLM-based code security review (enabled by default when API key is available)
+# Empty string or unset = enabled (default); "0" = disabled
+_enable_code_review_str = os.environ.get("ENABLE_CODE_SECURITY_REVIEW", "1")
+ENABLE_CODE_SECURITY_REVIEW = _enable_code_review_str != "0"
+
+# Pattern-based rules (enabled by default; set to "0" to use only LLM review)
+# Empty string or unset = enabled (default); "0" = disabled
+_enable_pattern_str = os.environ.get("ENABLE_PATTERN_RULES", "1")
+ENABLE_PATTERN_RULES = _enable_pattern_str != "0"
+
+# Per-feature kill switches. Each defaults to enabled. Set to "0" to disable
+# just that one feature without touching the rest. Motivated by feedback that
+# autonomous-agent setups sometimes need to disable specific injection points
+# (e.g. the PreToolUse[Task] prompt append, which can read as prompt injection
+# to hardened subagents) while keeping the rest of the plugin active. See
+# README for a full description of each feature.
+# Commit review also honors legacy SECURITY_GUIDANCE_COMMIT_REVIEW=off; see
+# is_commit_review_enabled().
+ENABLE_COMMIT_REVIEW = os.environ.get("ENABLE_COMMIT_REVIEW", "1") != "0"
+# Stop-hook git-diff review only — does NOT gate the commit/push reviews.
+# Lets multi-agent / shared-worktree deployments keep the commit reviewer
+# (anchored to a fixed SHA from the worker's own `git commit` stdout) while
+# turning off the Stop-hook diff (anchored on baseline_sha…HEAD, which a
+# sibling agent in the same worktree can move under us). The pre-existing
+# ENABLE_CODE_SECURITY_REVIEW gate is shared between Stop and commit/push
+# and stays for backwards compat as the all-LLM-review master switch.
+ENABLE_STOP_REVIEW = os.environ.get("ENABLE_STOP_REVIEW", "1") != "0"
+
+# Master kill switch. Either SECURITY_GUIDANCE_DISABLE=1 or
+# ENABLE_SECURITY_REMINDER=0 disables the plugin entirely. Kept as two names
+# because ENABLE_SECURITY_REMINDER predates the rename and some users already
+# have it baked into shell rc files; SECURITY_GUIDANCE_DISABLE reads correctly
+# as a kill switch (no double-negative).
+_disable_str = os.environ.get("SECURITY_GUIDANCE_DISABLE", "").strip().lower()
+SECURITY_GUIDANCE_DISABLED = (
+    _disable_str in ("1", "true", "yes", "on")
+    or os.environ.get("ENABLE_SECURITY_REMINDER", "1") == "0"
+)
+
+# Maximum number of times the stop hook can fire per user turn.
+# Allows iterative fixing: Antigravity stops → review → fix → stop → review again.
+# Set to 0 for unlimited (like the old plugin). Default 3 for iterative fixing.
+MAX_STOP_HOOK_FIRINGS = int(os.environ.get("MAX_STOP_HOOK_FIRINGS", "3"))
+
+# Cap on source files sent to the LLM reviewer per Stop fire. A stale baseline
+# meeting an ungitignored build directory can produce an enormous spurious
+# diff; unbounded diffs burn tokens and risk 400 on context length.
+MAX_DIFF_FILES = int(os.environ.get("MAX_DIFF_FILES", "30"))
+
+# Changed source paths past which the Stop review is skipped before any diff.
+# A set this large is a repo at $HOME or an unignored cache, not edits; no
+# platform takes that many paths in one git command, and only resolving them
+# takes seconds. Paths the review never reads (an unignored node_modules) do
+# not count: they must not hide the one edited source file beside them.
+MAX_REVIEW_SET_PATHS = int(os.environ.get("MAX_REVIEW_SET_PATHS", "100000"))
+
+# Appended to all exit(2) guidance so the asyncRewake auto-turn doesn't
+# cause the model to abandon the user's original request.
+CONTINUATION_SUFFIX = (
+    "\n\nAfter addressing or acknowledging this finding, continue with the "
+    "user's original request or continue waiting for their reply — this "
+    "review is supplementary feedback, not a replacement for your previous "
+    "response."
+)
+
+# Added to a Stop finding in a file with no record of this session's edit
+# tools writing it since the prompt. The review set comes from git, so it can
+# hold another session's or process's work in the same checkout, and without
+# a turn-start snapshot also earlier work. The record is not proof (a shell
+# command leaves none, and a record can be lost), so the note states only
+# what is known and leaves the decision to the session.
+NO_EDIT_RECORD_NOTE = (
+    "\n\nNote: this review has no record of this session's edit tools "
+    "writing {files} since the last prompt. It reviews every change it "
+    "finds in the checkout, so that change may have been made another way: "
+    "by a shell command, in an earlier turn, or by another process or "
+    "session working in this checkout. If it is not your change, leave the "
+    "file as it is and tell the user about the finding instead of fixing "
+    "it. If it is your change, handle the finding as usual."
+)
+NO_EDIT_RECORD_NOTE_MAX_FILES = 10
+
+
+def _no_edit_record_note(names):
+    """The note for `names` (from findings_without_edit_record), or "".
+    Quoted as JSON: a file name can hold a line break."""
+    if not names:
+        return ""
+    shown = ", ".join(json.dumps(n) for n in names[:NO_EDIT_RECORD_NOTE_MAX_FILES])
+    if len(names) > NO_EDIT_RECORD_NOTE_MAX_FILES:
+        shown += (f" and {len(names) - NO_EDIT_RECORD_NOTE_MAX_FILES} more of "
+                  "the files above")
+    return NO_EDIT_RECORD_NOTE.format(files=shown)
+
+
+# New files named in the notice for a failed `git add -N`.
+_LEFT_OUT_NAMES_SHOWN = 5
+
+# Extra keys emit_metrics appends to every row this invocation emits.
+_TAIL_METRICS: Dict[str, Any] = {}
+# Of those, the ones that go after the others whenever they were set: a row
+# over CC's key cap loses them before any older review key. Only the launcher
+# keys below come later; those are also on every smaller row of the session.
+_LAST_METRIC_KEYS = ("diff_seen", "cr_pack", "renamed_in", "mode", "repos_left_alone")
+
+# CC keeps this many keys of a row.
+_METRIC_KEY_CAP = 20
+# A review row's result, kind and time. emit_metrics puts them right after its
+# own keys (pv, launcher, usage, net_err), so the key cap cuts descriptive keys
+# before any of these. Keep it short: a failed row can carry 12 keys ahead of
+# them, and commit_review / push_sweep tell the rows apart under the old cap
+# of 10.
+_LEAD_METRIC_KEYS = ("review_failed", "api_error", "vulns_found",
+                     "commit_review", "push_sweep", "review_ms",
+                     "files_reviewed", "agentic", "deduped",
+                     "critical_count", "high_count")
+# How long a Stop row waits for its commit count.
+_TURN_COMMITS_WAIT_S = 2.0
+# Set by the Stop hook: queues the commit count for the row being emitted.
+_turn_commits_request = None
+
+# The launcher's slow interpreter probes, if any. After the keys above.
+_LAUNCHER_METRICS: Dict[str, Any] = launcher_probe_metrics()
+# Whether the launcher skipped a packaged alias. Only on rows sent anyway.
+_LAUNCHER_DIRECT: Dict[str, Any] = launcher_direct_metric()
+
+# Reviewer context diagnostics from llm.agentic_review, most useful first.
+_REVIEWER_CONTEXT_KEYS = ("rv_cwd_gone", "rv_tool_err", "rv_tool_calls")
+# How much work the agentic reviewer did, from llm.agentic_review: turns, and
+# time waiting on the model. They tell more turns from slower turns when
+# review_ms moves.
+_REVIEWER_EFFORT_KEYS = ("rv_turns", "rv_api_ms")
+# A clean commit review row has one free key under CC's key cap once
+# rv_tool_calls is on it, so the two are sent as one number:
+#   rv_effort = rv_turns * _EFFORT_TURNS_UNIT + rv_api_ms (capped below the unit)
+_EFFORT_TURNS_UNIT = 10_000_000
+# The packed value queued for this row. Emitted after every other key, the
+# launcher's included, so it never displaces one at the cap.
+_REVIEWER_EFFORT_METRICS: Dict[str, Any] = {}
+
+
+# Verdicts the reviewer's CLI refused, and how many of them were wrapped in
+# their own key, sent as one number: refused * 100 + wrapped (both capped).
+_REVIEWER_VERDICT_KEYS = ("rv_so_err", "rv_so_wrapped")
+
+
+def _note_reviewer_context(agentic_metrics):
+    """Queue the agentic reviewer's context and effort diagnostics for this row."""
+    for key in _REVIEWER_CONTEXT_KEYS:
+        if agentic_metrics.get(key):
+            _TAIL_METRICS[key] = agentic_metrics[key]
+    refused, wrapped = (min(agentic_metrics.get(k) or 0, 99) for k in _REVIEWER_VERDICT_KEYS)
+    if refused:
+        # On a row at the key cap this costs that row its rv_effort.
+        _TAIL_METRICS["rv_so"] = refused * 100 + wrapped
+    turns = agentic_metrics.get("rv_turns") or 0
+    api_ms = agentic_metrics.get("rv_api_ms") or 0
+    if turns or api_ms:
+        _REVIEWER_EFFORT_METRICS["rv_effort"] = (
+            turns * _EFFORT_TURNS_UNIT + min(api_ms, _EFFORT_TURNS_UNIT - 1))
+
+
+def _request_turn_commits(session_id, cwd, turn_started):
+    """Count the commits from the prompt to now on this Stop row."""
+    global _turn_commits_request
+    import time as _time
+    try:
+        started_at, head_before = turn_started
+    except (TypeError, ValueError):
+        return
+    _turn_commits_request = (session_id, cwd, started_at, head_before, _time.time())
+
+
+def _add_turn_commits(metrics):
+    """Append `turn_commits` to a Stop row that has room for it. Computed
+    here, once the row is ready, so the turn's commit hooks have had the
+    length of the review to start. On a thread with a short limit: findings
+    wait for this row. Commits that find no room are left for a later Stop
+    row of the turn. Never raises."""
+    if not _turn_commits_request or len(metrics) >= _METRIC_KEY_CAP:
+        return
+    session_id, cwd, started_at, head_before, until = _turn_commits_request
+    result = []
+
+    def _count():
+        try:
+            repo_root = _git_toplevel(cwd) if cwd else None
+            result.append(diffstate.turn_commits_code(
+                repo_root, started_at, until, head_before) if repo_root else (None, []))
+        except Exception as e:
+            debug_log(f"turn commit count failed: {e}")
+    try:
+        counter = threading.Thread(target=_count, daemon=True)
+        counter.start()
+        counter.join(_TURN_COMMITS_WAIT_S)
+    except RuntimeError as e:  # no thread to be had
+        debug_log(f"turn commit count failed: {e}")
+    code, shas = result[0] if result else (diffstate.TURN_COMMITS_ERROR, [])
+    if code is not None:
+        metrics["turn_commits"] = code
+        diffstate.note_counted_commits(session_id, shas)
+
+
+def emit_metrics(
+    metrics,
+    rewake_summary=None,
+    additional_context=None,
+    system_message=None,
+    hook_event_name="PostToolUse",
+):
+    """
+    write_to_file a SyncHookJSONOutput line to stdout for Google Antigravity to pick up.
+    For asyncRewake (Stop) hooks, CC scans stdout for the first {-prefixed line
+    that validates as SyncHookJSONOutput and emits the hook metrics event.
+    For sync (PostToolUse) hooks, the metrics key in the normal JSON response
+    is picked up directly.
+
+    Constraints: keys ^[a-z][a-z0-9_]{0,39}$, values bool|finite-number,
+    20-key cap (was 10 in older CC versions).
+
+    `pv` and the tok_*/cost_usd usage block are PREPENDED so they survive any
+    future overflow — CC keeps only the first 20 keys, so insertion order
+    decides what drops. The old `len(metrics) < 10` guard was load-bearing for
+    the same reason but stale: once `rate_count` was added to every
+    commit-review emit, the with-vulns dict hit 10 keys, `pv` was skipped, and
+    findings metrics landed without a plugin version attached, breaking
+    per-version breakdowns. `_LEAD_METRIC_KEYS` come next on a review row,
+    wherever the caller put them.
+
+    `rewake_summary` (asyncRewake only): per-run override of the static
+    rewakeSummary in hooks.json, shown to the user in the terminal as the
+    task-notification one-liner. Must be in the same JSON line as the metrics
+    because CC stops scanning stdout after the first {-prefixed line.
+
+    `additional_context` (asyncRewake findings, exit-2 callers only):
+    model-visible guidance text, written to stderr for every event. CC's
+    asyncRewake delivery reads `stderr || stdout` for the model-visible body
+    and only scans stdout JSON for metrics+rewakeSummary — it never reads
+    additionalContext on this path. stdout keeps one valid JSON line so
+    metrics + rewakeSummary survive:
+
+      - Stop / SubagentStop: also top-level decision:"block" + reason, for
+        the sync-fallback path (single-shot `claude -p`, where asyncRewake
+        degrades to a sync Stop hook that reads decision/reason). There is
+        no `Stop` member in CC's hookSpecificOutput union, so that field
+        must not be used here.
+
+      - PostToolUse (commit-review, push-sweep): stderr only. In the
+        sync-fallback path CC shows the model an exit-2 PostToolUse hook's
+        stderr, so additionalContext would repeat the text.
+
+    Empty/None additional_context emits neither channel (back-compat for
+    metrics-only callers).
+
+    `system_message` (optional, asyncRewake only): user-visible TUI message,
+    distinct from rewakeSummary which is the task-notification one-liner.
+    Use sparingly — the rewakeMessage in hooks.json is the primary user
+    surface; systemMessage adds a per-fire override when the static
+    rewakeMessage isn't specific enough for the finding being shown.
+
+    `hook_event_name` (used only when additional_context is set): whether to
+    add decision/reason as above. Defaults to "PostToolUse" (commit-review and
+    push-sweep are the most common callers); handle_stop_hook passes "Stop".
+    """
+    _log_usage(_usage_metrics())
+    head = {}
+    if _PV and "pv" not in metrics:
+        head["pv"] = _PV
+    # sg-python.sh could only start this interpreter by its real path: the
+    # names on PATH were launcher aliases that cannot read the plugin files.
+    if os.environ.get("SG_LAUNCHER_FALLBACK") == "1":
+        head["launcher_fallback"] = 1
+    if _precheck_miss:
+        # Up front: this is the key that says a text check would have lost a
+        # review, so it must not be the one cut by the key cap.
+        head["precheck_miss"] = 1
+    usage = _usage_metrics()
+    head.update(usage)
+    # Why the last call got no HTTP response (api_error -1 says only that it
+    # did not). Ahead of the row's own keys: on a failed review this is the
+    # key that says what failed, so it is not the one to lose to the key cap.
+    net_err = _net_error_metric()
+    if net_err:
+        head["net_err"] = net_err
+    # Skip rows are left as they are: theirs is the skip reason.
+    lead = {} if metrics.get("skipped") else {
+        k: metrics[k] for k in _LEAD_METRIC_KEYS if k in metrics}
+    metrics = {**head, **lead, **metrics}
+    if not metrics.get("skipped"):
+        # Always true on a row that is not a skip, so cut before the rest.
+        for k in ("commit_review_on", "push_sweep_on"):
+            if k in metrics:
+                metrics[k] = metrics.pop(k)
+    # Diagnostic keys go last, so they are the first dropped when a row is
+    # over CC's key cap and never displace an existing key.
+    tail = {}
+    if llm._store_certs_skipped:
+        # The Windows certificate store held entries OpenSSL cannot read and
+        # the plugin's API calls ran on the store without them.
+        tail["tls_store_skipped"] = llm._store_certs_skipped
+    if usage or "review_ms" in metrics or metrics.get("review_failed"):
+        # Review rows say whether the plugin's calls went through a gateway,
+        # so the error rate behind gateways can be read per plugin version.
+        cfg = llm.gateway_cfg()
+        if cfg:
+            tail["gateway_cfg"] = cfg
+    if not llm._send_strict_mcp:
+        # An inner CLI refused --strict-mcp-config (a machine with a
+        # managed-mcp.json) and the review was started again without it.
+        tail["strict_mcp_off"] = 1
+    tail.update(_TAIL_METRICS)
+    left_alone = gitutil.repos_left_alone()
+    if left_alone:
+        tail["repos_left_alone"] = left_alone
+    for k in _LAST_METRIC_KEYS:
+        if k in tail:
+            tail[k] = tail.pop(k)
+    tail.update(_LAUNCHER_METRICS)
+    tail.update(_REVIEWER_EFFORT_METRICS)
+    # Last of all: the first key a full row loses.
+    tail.update(_LAUNCHER_DIRECT)
+    metrics = {**metrics, **{k: v for k, v in tail.items() if k not in metrics}}
+    _add_turn_commits(metrics)
+    out = {"metrics": metrics}
+    if rewake_summary:
+        out["rewakeSummary"] = rewake_summary
+    if additional_context:
+        # Guidance on stderr, the asyncRewake body channel (`stderr || stdout`).
+        sys.stderr.write(additional_context)
+        sys.stderr.flush()
+        if hook_event_name in ("Stop", "SubagentStop"):
+            # Sync-fallback path for Stop reads decision/reason.
+            out["decision"] = "block"
+            out["reason"] = additional_context
+    if system_message:
+        out["systemMessage"] = system_message
+    _write_hook_output(out)
+
+
+def _llm_review_off(session_id):
+    """Why no LLM review can run: (log text, extra metrics), or None."""
+    if not ENABLE_CODE_SECURITY_REVIEW:
+        return "LLM review disabled", {}
+    if not llm.can_review(session_id):
+        return ("no API credentials and no Antigravity apps gateway sign-in",
+                {"no_creds": True})
+    return None
+
+
+# Google Antigravity hands a signed-in user's credentials to this plugin's hooks,
+# but not in a session started with one of these set.
+_NO_CREDENTIALS_NOTICE_INTERVAL_SEC = 7 * 24 * 3600
+
+
+def _credential_withholding_env_vars():
+    names = [v for v in ("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+                         "DISABLE_TELEMETRY") if os.environ.get(v)]
+    if os.environ.get("DO_NOT_TRACK", "").strip().lower() in (
+            "1", "true", "yes", "on"):
+        names.append("DO_NOT_TRACK")
+    return names
+
+
+def _no_credentials_notice(file_path, session_id):
+    """Text telling the user the LLM reviews are not running, or None.
+
+    With no credential and no Antigravity apps gateway sign-in, every Stop,
+    commit and push review is skipped, and nothing else tells the user.
+    Returned for an edit inside a git repo (the reviews only look at those),
+    at most once a week per install: the marker file in the state dir holds
+    the time of the last notice, or of the last check that found the reviews
+    running through a Antigravity apps gateway sign-in. A marker that can't be
+    written means no notice rather than one on every edit. The caller is the
+    replace_file_content/write_to_file hook because the review hooks run in the background, where
+    Google Antigravity does not show a systemMessage.
+    """
+    import time as _time
+    try:
+        marker = os.path.join(_resolve_state_dir(), ".no_credentials_notice")
+        try:
+            age = _time.time() - os.path.getmtime(marker)
+            if 0 <= age < _NO_CREDENTIALS_NOTICE_INTERVAL_SEC:
+                return None
+        except OSError:
+            pass
+        if not _git_toplevel(os.path.dirname(os.path.abspath(file_path))):
+            return None
+        make_state_dir(os.path.dirname(marker))
+        with open(marker, "w"):
+            pass
+        # In a session signed in to a Antigravity apps gateway the reviews do run,
+        # through the user's claude (llm.gateway_review_cli). `claude auth
+        # status` runs only after the marker is written, so an edit waits for
+        # it at most once a week.
+        if llm.can_review(session_id):
+            return None
+    except OSError:
+        return None
+    withheld_by = _credential_withholding_env_vars()
+    if llm.AUTH_TOKEN_HELD_BACK:
+        why = ("ANTHROPIC_AUTH_TOKEN is not a claude.ai token and "
+               "ANTHROPIC_BASE_URL is not set, so it was not sent anywhere")
+    elif withheld_by:
+        why = ("Google Antigravity does not pass your sign-in to plugins while "
+               + " or ".join(withheld_by) + " is set")
+    else:
+        why = "No Google Antigravity Ecosystem credentials were passed to the plugin's hooks"
+    rest = (", so only the pattern warnings on edits are active"
+            if ENABLE_PATTERN_RULES else "")
+    return (
+        "security-guidance: the AI security review of your changes is not "
+        f"running. {why}{rest}. See \"Credentials\" in the plugin README. "
+        "Set ENABLE_CODE_SECURITY_REVIEW=0 to turn the review off and hide "
+        "this notice, which is shown at most once a week."
+    )
+
+# =====================================================================
+# State management
+# =====================================================================
+
+#
+# Low-level state-file plumbing (_state_key, get_state_file,
+# get_lock_file, cleanup_old_state_files, load_state, save_state,
+# with_locked_state) moved to session_state.py and re-exported above.
+
+def atomic_check_and_mark_warning(session_id, warning_key):
+    """
+    Atomically check if a warning has been shown and mark it as shown if not.
+    Returns True if this is the first time seeing this warning (should show it),
+    False if it was already shown (should skip it).
+    """
+    def _check(state):
+        warnings = state["shown_warnings"]
+        if warning_key in warnings:
+            return False
+        warnings.append(warning_key)
+        return True
+
+    result = with_locked_state(session_id, _check)
+    return result if result is not None else True
+
+def atomic_check_counter(session_id, counter_key, max_count):
+    """
+    Atomically check if a counter has reached its limit and increment if not.
+    Returns True if the counter is below max_count (should proceed),
+    False if it has reached or exceeded max_count (should skip).
+    """
+    def _check(state):
+        counters = state.get("counters", {})
+        current = counters.get(counter_key, 0)
+        if current >= max_count:
+            return False
+        counters[counter_key] = current + 1
+        state["counters"] = counters
+        return True
+
+    result = with_locked_state(session_id, _check)
+    return result if result is not None else True
+
+def atomic_check_rate_limit(session_id, key, max_per_window, window_s):
+    """Rolling-window rate limit: allow at most `max_per_window` calls per
+    `window_s` seconds, per (session_id, key).
+
+    Returns (allowed: bool, count_in_window: int). count_in_window is the
+    post-decision count (i.e., includes this call if allowed) so callers can
+    emit it directly as a telemetry gauge.
+
+    Replaces session-lifetime `atomic_check_counter` for commit-review and
+    push-sweep. Telemetry showed a small but persistent share of sessions hit
+    the lifetime cap, and those were multi-day persistent sessions that then
+    lost coverage for many subsequent commits — not burst abusers. A rolling
+    hour keeps the same cost ceiling for any 1h window while letting long
+    sessions regain coverage.
+
+    State key: rate_limits: {"<key>": [ts, ts, ...]}. Timestamps are pruned
+    on every call so the list is bounded by max_per_window; no migration
+    needed from the old `counters` dict — different key.
+    """
+    import time as _time
+    now = _time.time()
+    cutoff = now - window_s
+
+    def _check(state):
+        buckets = state.setdefault("rate_limits", {})
+        ts_list = buckets.get(key, [])
+        # Prune; tolerate non-numeric junk from a corrupted state file.
+        ts_list = [t for t in ts_list if isinstance(t, (int, float)) and t > cutoff]
+        if len(ts_list) >= max_per_window:
+            buckets[key] = ts_list
+            return False, len(ts_list)
+        ts_list.append(now)
+        buckets[key] = ts_list
+        return True, len(ts_list)
+
+    result = with_locked_state(session_id, _check)
+    # State unavailable → fail-open (same posture as atomic_check_counter).
+    return result if result is not None else (True, 0)
+
+# =====================================================================
+# Warning outcome tracking
+#
+# Records each pattern warning as pending when it fires. At Stop, sweep
+# all pending entries: re-read each file, re-check patterns, and emit a
+# fixed-vs-unresolved tally. No per-edit work — pending is recorded only
+# when a pattern matches (rare), and the sweep runs once at session end.
+#
+# State key: pending_warnings: {"<file>:<rule>": true}
+# =====================================================================
+
+def record_pending_warnings(session_id, file_path, rule_names):
+    """Mark file:rule pairs as pending for the Stop-hook outcome sweep."""
+    def _record(state):
+        pending = state.get("pending_warnings")
+        if not isinstance(pending, dict):
+            pending = {}
+            state["pending_warnings"] = pending
+        for rule in rule_names:
+            pending[f"{file_path}:{rule}"] = True
+    with_locked_state(session_id, _record)
+
+def sweep_pending_warnings(session_id):
+    """
+    Stop-hook final sweep. Re-read every file in pending_warnings, re-check
+    patterns, and return (fixed, unresolved, unresolved_mask, fired_mask).
+    fired_mask has a bit for every built-in rule that matched an edit since
+    the last sweep (whether or not its reminder was shown again), so the two
+    masks give, per rule, fired and still matching. Clears state.
+    A file that's been deleted counts as fixed — the dangerous code is gone.
+    Never raises — this is telemetry and must not break the Stop hook.
+    """
+    def _sweep(state):
+        try:
+            pending = state.get("pending_warnings")
+            if not isinstance(pending, dict) or not pending:
+                return 0, 0, 0, 0
+
+            by_file = {}
+            for key in pending:
+                if not isinstance(key, str) or ":" not in key:
+                    continue
+                fp, _, rule = key.rpartition(":")
+                if fp.endswith(":user"):
+                    # User rules are named "user:<name>"; keep them apart
+                    # from a built-in rule of the same name.
+                    fp, rule = fp[:-len(":user")], "user:" + rule
+                by_file.setdefault(fp, set()).add(rule)
+
+            unresolved = []
+            fired = set()
+            fixed = 0
+            for fp, rules in by_file.items():
+                fired |= rules
+                try:
+                    with open(fp, "r", errors="replace") as f:
+                        still_matching = {r for r, _ in check_patterns(fp, f.read())}
+                except (OSError, IOError):
+                    still_matching = set()
+                for rule in rules:
+                    if rule in still_matching:
+                        unresolved.append(rule)
+                    else:
+                        fixed += 1
+
+            state["pending_warnings"] = {}
+            # Filter to known rules so a renamed/removed rule in old state
+            # doesn't KeyError rule_names_to_mask.
+            known = [r for r in unresolved if r in _RULE_NAME_TO_ID]
+            return (fixed, len(unresolved), rule_names_to_mask(known),
+                    rule_names_to_mask(fired))
+        except Exception as e:
+            debug_log(f"sweep_pending_warnings failed: {e}")
+            return 0, 0, 0, 0
+
+    result = with_locked_state(session_id, _sweep)
+    return result if result is not None else (0, 0, 0, 0)
+
+# =====================================================================
+# Git baseline management
+# =====================================================================
+
+# =====================================================================
+# Pattern matching
+# =====================================================================
+
+def _notebook_cell_sources(content):
+    """Cell sources of a saved notebook, or None when content is not one (a
+    single cell's source, say)."""
+    if not isinstance(content, str) or not content.lstrip("\ufeff \t\r\n").startswith("{"):
+        return None
+    try:
+        sources = [cell.get("source", "") for cell in json.loads(content.lstrip("\ufeff"))["cells"]]
+        return "\n".join(src if isinstance(src, str) else "".join(src) for src in sources)
+    except Exception:
+        return None
+
+def check_patterns(file_path, content):
+    """Check if file path or content matches any security patterns. Returns ALL matches."""
+    normalized_path = file_path.lstrip("/")
+    matches = []
+
+    # A saved notebook is JSON: its string escapes hide code from the rules
+    # ("\nos.system(" has no word boundary) and its outputs can run to
+    # megabytes. Check the cells as written instead.
+    if normalized_path.endswith(".ipynb"):
+        cell_sources = _notebook_cell_sources(content)
+        if cell_sources is not None:
+            content = cell_sources
+
+    custom_searches = []  # (where in matches the rule goes, its pattern)
+
+    for pattern in list(SECURITY_PATTERNS) + extensibility.user_patterns():
+        # path_filter is a gate: when present, the rule only applies to
+        # matching paths. Distinct from path_check, which is itself a
+        # positive match condition (e.g. .github/workflows/).
+        if "path_filter" in pattern:
+            try:
+                if not pattern["path_filter"](normalized_path):
+                    continue
+            except Exception:
+                continue
+
+        matched = False
+
+        if "path_check" in pattern:
+            try:
+                if pattern["path_check"](normalized_path):
+                    matched = True
+            except Exception:
+                pass
+
+        if not matched and "substrings" in pattern and content:
+            for substring in pattern["substrings"]:
+                if substring in content:
+                    matched = True
+                    break
+
+        if not matched and "regex" in pattern and content:
+            if "_source" in pattern:  # a custom rule: searched below
+                custom_searches.append((len(matches), pattern))
+                continue
+            try:
+                if re.search(pattern["regex"], content):
+                    matched = True
+            except Exception:
+                pass
+
+        if matched:
+            matches.append((pattern["ruleName"], pattern["reminder"]))
+
+    if custom_searches:
+        found = extensibility.search_custom_regexes(
+            [pattern["regex"] for _, pattern in custom_searches], content)
+        for (where, pattern), hit in reversed(list(zip(custom_searches, found))):
+            if hit:
+                matches.insert(where, (pattern["ruleName"], pattern["reminder"]))
+
+    return matches
+
+def extract_content_from_input(tool_name, tool_input, tool_response=None):
+    """Extract content to check from tool input based on tool type."""
+    if tool_name == "write_to_file":
+        return tool_input.get("content", "")
+    elif tool_name == "replace_file_content":
+        return tool_input.get("new_string", "")
+    elif tool_name == "MultiEdit":
+        edits = tool_input.get("edits", [])
+        if edits:
+            return " ".join(edit.get("new_string", "") for edit in edits)
+        return ""
+    elif tool_name == "NotebookEdit":
+        # A deleted cell adds no code. A failed edit comes back as an error
+        # in the response, with the notebook unchanged.
+        if tool_input.get("edit_mode") == "delete":
+            return ""
+        if isinstance(tool_response, dict) and tool_response.get("error"):
+            return ""
+        new_source = tool_input.get("new_source", "")
+        return new_source if isinstance(new_source, str) else ""
+    return ""
+
+# =====================================================================
+# Hook handlers
+# =====================================================================
+
+def _store_baseline_fail(state, fail):
+    """Keep diffstate.last_baseline_fail next to the baseline_sha it describes."""
+    if fail:
+        state["baseline_fail"] = fail
+    else:
+        state.pop("baseline_fail", None)
+
+
+# A prompt waits for this hook, so one this slow is worth a metrics row. Faster
+# prompts send none: the row would be one more event per prompt for every user.
+SLOW_PROMPT_MS = 1000
+
+
+def _slow_prompt_metrics(cwd, total, baseline, untracked, captured, baseline_fail):
+    """The metrics row for a slow prompt. Times are seconds, spent in
+    handle_user_prompt_submit (the launcher reports its own). Counts and flags
+    only, never a path. Telemetry only."""
+    metrics = {
+        "ups_ms": int(total * 1000),
+        "ups_baseline_ms": int(baseline * 1000),
+        "ups_untracked_ms": int(untracked * 1000),
+    }
+    if diffstate.last_index_entries is not None:
+        metrics["ups_index_entries"] = diffstate.last_index_entries
+    if on_windows_drive(cwd):
+        metrics["ups_wsl_drive"] = 1
+    if not captured:
+        metrics["ups_no_baseline"] = 1
+    if baseline_fail:
+        metrics["ups_baseline_fail"] = baseline_fail
+    return metrics
+
+
+def handle_user_prompt_submit(input_data):
+    """
+    Handle UserPromptSubmit — capture git baseline SHA.
+    Called on every user prompt. Updates the baseline so the stop hook
+    only reviews changes made since the last prompt.
+
+    Does NOT reset touched_paths/fire_count/previous_findings — those are
+    consumed by Stop (consume_stop_state) and time-expired respectively.
+    UPS racing the asyncRewake Stop hook caused a meaningful share of reviews
+    to be lost when the wipe landed before Stop's state read.
+
+    """
+    import time as _time
+    started = _time.monotonic()
+    cwd = input_data.get("cwd", "")
+    if not cwd:
+        debug_log("UPS: no cwd, skipping baseline capture")
+        sys.exit(0)
+
+    session_id = input_data.get("session_id", "default")
+    # The untracked snapshot has one reader: the Stop-hook diff review, which
+    # skips before reading it when either of these switches is off (see
+    # handle_stop_hook). Listing the worktree on every prompt then buys
+    # nothing, so only the turn baseline (still read by the write_to_file pattern
+    # filter) is captured.
+    snapshot_untracked = ENABLE_STOP_REVIEW and ENABLE_CODE_SECURITY_REVIEW
+    spent = {"baseline": 0.0, "untracked": 0.0}
+
+    def _timed(key, fn, repo_cwd):
+        began = _time.monotonic()
+        try:
+            return fn(repo_cwd)
+        finally:
+            spent[key] += _time.monotonic() - began
+
+    def _capture(repo_cwd):
+        if not snapshot_untracked:
+            return _timed("baseline", capture_git_baseline, repo_cwd), None
+        # the baseline snapshot and ls-files both walk the worktree (~2-5s each in a
+        # very large repo). Run them concurrently so UPS latency stays
+        # ≈ max(both).
+        import concurrent.futures as _cf
+        with _cf.ThreadPoolExecutor(max_workers=2) as _ex:
+            _f_sha = _ex.submit(_timed, "baseline", capture_git_baseline, repo_cwd)
+            _f_ut = _ex.submit(_timed, "untracked", _list_untracked, repo_cwd)
+            # Taken whether or not the snapshot produced a SHA. The baseline
+            # falls back to HEAD when there are no TRACKED changes, but
+            # pre-existing untracked files still need to be excluded from the
+            # next Stop's review_set — otherwise an untracked-only working
+            # tree gets every untracked file reviewed on every turn until
+            # something tracked is dirtied.
+            return _f_sha.result(), _f_ut.result() or {}
+
+    captured_at = _time.time()
+    sha, untracked_now = _capture(cwd)
+    # No repo here and none remembered: the listing above failed, it did not
+    # come back empty.
+    no_repo = False
+    if not sha and not _git_toplevel(cwd):
+        hint = gitutil.session_repo_instead_of(cwd) or load_repo_hint(session_id)
+        if hint:
+            debug_log(f"UPS: cwd is not a git repo; using repo hint {hint!r}")
+            cwd = hint
+            sha, untracked_now = _capture(cwd)
+        else:
+            no_repo = True
+    baseline_fail = diffstate.last_baseline_fail
+    # The repo root rides on the same git call as HEAD.
+    root, head = (None, None) if no_repo else _git_toplevel_and_head(cwd)
+    if sha and not head:
+        head = _git_rev_parse_head(cwd)
+
+    # If the previous turn's Stop hook never ran (user interrupt, follow-up
+    # during work, tool-reject, model crash, maxTurns, PostToolUse block…),
+    # touched_paths is still populated because consume_stop_state is the only
+    # consumer and it runs under the state lock. Overwriting baseline_sha now
+    # would re-baseline *past* those unreviewed edits, making them permanently
+    # invisible to the next Stop. Preserve the old baseline so the next Stop
+    # diffs the aborted turn's edits plus the new turn's edits together.
+    preserved = {"value": False}
+
+    def _save(state):
+        # Where this turn's own commits start, also when the baseline below
+        # stays an earlier turn's. Telemetry only.
+        state["turn_started"] = [captured_at, head]
+        # Only preserve if there's actually an old baseline to preserve.
+        # First UPS of a session can have touched_paths if PostToolUse
+        # somehow ran first (print mode, odd harnesses) — in that case
+        # we still need to capture a baseline.
+        if state.get("touched_paths") and state.get("baseline_sha"):
+            preserved["value"] = True
+            # A baseline captured while the Stop review was off has no
+            # snapshot beside it. Without one the next Stop would take every
+            # untracked file in the tree as written this turn.
+            if untracked_now is not None and "untracked_at_baseline" not in state:
+                state["untracked_at_baseline"] = untracked_now
+            # Once a prompt failed to capture, the baseline is old whatever
+            # later prompts did.
+            state["baseline_kept"] = (
+                KEPT_NO_CAPTURE
+                if not sha or state.get("baseline_kept") == KEPT_NO_CAPTURE
+                else KEPT_UNREVIEWED)
+            return
+        if sha:
+            state["baseline_sha"] = sha
+            state["head_at_capture"] = head
+            state.pop("turn_touched", None)
+            state.pop("turn_touched_lost", None)
+            _store_baseline_fail(state, baseline_fail)
+            # A Stop review that ends up in another checkout does not use
+            # this baseline.
+            state["baseline_root"] = root
+            state.pop("baseline_kept", None)
+        elif state.get("baseline_sha"):
+            state["baseline_kept"] = KEPT_NO_CAPTURE
+        # When the turn began: what a Stop review in another checkout has
+        # to go on.
+        state["prompt_at"] = captured_at
+        # untracked_at_baseline is independent of whether the snapshot produced
+        # a SHA, so compute_v2_review_set's preexisting-untracked exclusion
+        # works in untracked-only trees. None means no snapshot was taken
+        # (Stop review off): drop the previous one, which belongs to an older
+        # baseline.
+        if untracked_now is None:
+            state.pop("untracked_at_baseline", None)
+        elif not no_repo:
+            # no_repo: the earlier baseline stays (above), and so does the
+            # snapshot that belongs to it. An empty one in its place would
+            # make every untracked file in that repo look new.
+            state["untracked_at_baseline"] = untracked_now
+    with_locked_state(session_id, _save)
+
+    if preserved["value"]:
+        debug_log(
+            "UPS: preserving prior baseline — previous Stop hook never "
+            "consumed touched_paths (likely user interrupt / aborted turn)"
+        )
+    elif sha:
+        debug_log(f"Captured git baseline: {sha[:12]}")
+    else:
+        # Show cwd so the next reporter can immediately see when this isn't
+        # actually "not a git repo" but a path-encoding / permissions / git
+        # invocation failure. See #2099.
+        debug_log(f"Failed to capture git baseline (cwd={cwd!r}) — not a git repo, "
+                  f"or git invocation failed (check log entries above)")
+
+    total = _time.monotonic() - started
+    debug_log(f"UPS: took {total:.2f}s (baseline {spent['baseline']:.2f}s, "
+              f"untracked {spent['untracked']:.2f}s)")
+    if (total * 1000 >= SLOW_PROMPT_MS or _LAUNCHER_METRICS) and not portable_output():
+        emit_metrics(_slow_prompt_metrics(
+            cwd, total, spent["baseline"], spent["untracked"], bool(sha), baseline_fail))
+
+    sys.exit(0)
+
+def _resolve_amend_pre_sha(repo_root, expected_post_sha=None):
+    """For a `git commit --amend` we just ran, return the pre-amend SHA via
+    reflog, or None if it can't be safely determined.
+
+    expected_post_sha: the post-amend SHA the caller parsed from bash stdout
+    (or reflog). If provided, HEAD@{0} of `repo_root` must match it (prefix
+    compare — bash stdout SHAs are abbreviated, reflog %H is 40 chars) before
+    we trust the reflog-derived pre-amend SHA. This guards against the
+    cross-repo case (`cd ../other && git commit --amend && cd -`) where
+    `repo_root` happens to have its own recent amend that's unrelated to
+    the bash command we're reviewing.
+
+    We require HEAD@{0}'s reflog subject to start with `commit (amend)` —
+    otherwise our `--amend` regex matched something that didn't actually
+    perform an amend (e.g., `git commit --amend --dry-run`, aliased commands,
+    aborted amends), and HEAD@{1} would be the wrong commit. Also requires
+    HEAD@{1} to NOT itself be an amend, since back-to-back amends would have
+    HEAD@{1} as the previous-amend's post state — the original commit we
+    want to compare against is then HEAD@{2}, but at that point we're
+    reaching and fall back to a full review.
+
+    Bytes + decode('utf-8', errors='replace'): reflog subjects embed commit
+    subjects, which git stores as raw bytes (commit messages may be latin-1
+    / cp1252 / etc.). text=True would raise UnicodeDecodeError (a
+    ValueError, not OSError) on non-UTF8 bytes and crash the hook.
+    """
+    if not repo_root:
+        return None
+    try:
+        r = subprocess.run(
+            [*GIT_CMD, "log", "-g", "-2", "--format=%H|%gs", "HEAD"],
+            cwd=repo_root, capture_output=True, timeout=5,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return None
+    if r.returncode != 0:
+        return None
+    stdout_text = r.stdout.decode("utf-8", errors="replace")
+    lines = [ln for ln in stdout_text.splitlines() if "|" in ln]
+    if len(lines) < 2:
+        return None
+    head0_sha, _, head0_subj = lines[0].partition("|")
+    head1_sha, _, head1_subj = lines[1].partition("|")
+    if not head0_subj.startswith("commit (amend)"):
+        return None
+    if head1_subj.startswith("commit (amend)"):
+        return None
+    # Cross-repo guard: the post-amend SHA the caller is about to review must
+    # match HEAD@{0} of repo_root. Otherwise the bash command was likely run
+    # in a different repo than repo_root, and the reflog we just read is
+    # unrelated. Prefix-compare: expected_post_sha is typically the 7-char
+    # abbreviated SHA captured from bash stdout by _COMMIT_SHA_RE (git's
+    # default core.abbrev floor), while head0_sha is the full 40-char %H —
+    # strict equality would always fail and silently disable the delta path.
+    if expected_post_sha and not head0_sha.startswith(expected_post_sha):
+        return None
+    return head1_sha or None
+
+# git-only signals that corroborate a real commit object — NOT emitted by
+# pre-commit / lint-staged / husky hook output, which can contain bracketed
+# labels like `[pre-commit abc1234]` that otherwise look like a commit line.
+_COMMIT_DIFFSTAT_PATTERNS = [
+    re.compile(r'\b\d+ files? changed'),
+    re.compile(r'^ create mode ', re.MULTILINE),
+    re.compile(r'^ delete mode ', re.MULTILINE),
+    re.compile(r'^ rename ', re.MULTILINE),
+]
+
+# Capture-group form of the [branch sha] pattern. Mirrors Google Antigravity's own
+# commit-id parsing, but tolerates spaces before the
+# sha (covers `[detached HEAD abc1234]`). 7–40 hex chars: git's abbrev floor
+# through full sha; the abbrev resolves fine with `git show`. Anchored to
+# line-start so a `[hex]` in the commit subject (`[main abc] Revert [e38]`)
+# or trailing hook output isn't picked up and fed to `git show`.
+_COMMIT_SHA_RE = re.compile(r'^\[[^\]]*?\b([0-9a-f]{7,40})\]', re.MULTILINE)
+
+# Regex matching `git commit` commands, global options included (see below).
+#
+# Also matches `gt create` and `gt modify` — Graphite's stacked-PR wrapper
+# around git. `gt create` produces a new commit (mapped to git commit
+# semantics); `gt modify` amends the current commit (mapped to git commit
+# --amend, also flagged by _GIT_AMEND_RE below). hooks.json has a
+# `run_command(gt *)` entry so the hook subprocess spawns for gt invocations.
+#
+# Global options allowed between `git` and the subcommand, shared by
+# _GIT_COMMIT_RE and _GIT_PUSH_RE: `-C <path>`, `-c key=val`, `--opt=val`,
+# the long options that take a separate value, and flags that take none
+# (`--no-pager`, `-p`). A value may be quoted in part (`-c user.name="A B"`).
+# Between the words: whitespace, or a line continued with a backslash (run_command) or
+# a backtick (PowerShell).
+_WORD_GAP = r'(?:\s|[\\`]\r?\n)+'
+_GIT_OPT_VALUE = r'''(?:(?![\\`]\r?\n)[^\s"']|"[^"]*"|'[^']*')+'''
+_GIT_VALUE_OPTS = r'git-dir|work-tree|namespace|config-env|attr-source'
+_GIT_GLOBAL_OPTS = (
+    r'(?:' + _WORD_GAP + r'-[Cc]' + _WORD_GAP + _GIT_OPT_VALUE
+    + r'|' + _WORD_GAP + r'--[^\s=]+=' + _GIT_OPT_VALUE
+    + r'|' + _WORD_GAP + r'--(?:' + _GIT_VALUE_OPTS + r')' + _WORD_GAP + _GIT_OPT_VALUE
+    # `--help` / `--version` run no subcommand.
+    + r'|' + _WORD_GAP + r'(?:--(?!(?:' + _GIT_VALUE_OPTS + r'|help|version)\s)[^\s=]+|-[pP])(?=\s))*'
+)
+# PowerShell runs programs by any case and with their extension, and a quoted
+# full path ends in a quote.
+_GIT_PROGRAM = r"""(?i:git(?:\.(?:exe|cmd))?)["']?"""
+_GIT_COMMIT_RE = re.compile(
+    # Without the global-option tolerance, `git -C /repo commit` is silently
+    # dropped by the handler — see #2089's secondary finding. The gt branch
+    # has no global-option layer to worry about.
+    # `(?!-)`: not the plumbing commands `git commit-graph` / `git commit-tree`.
+    r'\b' + _GIT_PROGRAM + _GIT_GLOBAL_OPTS + _WORD_GAP + r'commit\b(?!-)'
+    r'|\bgt' + _WORD_GAP + r'(?:create|modify)\b'
+)
+# Match either the `--amend` flag (with the leading whitespace boundary
+# preserved from the original) OR `gt modify` which is semantically an
+# amend. The handler treats matches as "find the pre-amend SHA via reflog
+# and diff against THAT, not against the post-amend HEAD's parent" — same
+# code path for both git --amend and gt modify.
+_GIT_AMEND_RE = re.compile(r'(?:\s--amend\b|\bgt' + _WORD_GAP + r'modify\b)')
+
+# Rolling-window cap on LLM commit-review calls. See atomic_check_rate_limit
+# docstring for the rationale that motivated the switch from a lifetime cap.
+# `MAX_COMMIT_REVIEWS_PER_SESSION` is read for backward-compat with users who
+# tuned it; the value is reinterpreted as per-hour.
+MAX_COMMIT_REVIEWS_PER_HOUR = int(
+    os.environ.get("MAX_COMMIT_REVIEWS_PER_HOUR")
+    or os.environ.get("MAX_COMMIT_REVIEWS_PER_SESSION", "20")
+)
+COMMIT_REVIEW_RATE_WINDOW_S = int(
+    os.environ.get("COMMIT_REVIEW_RATE_WINDOW_S", "3600")
+)
+
+# ─── push-sweep ─────────────────────────────────────────────────────────────
+#
+# Mirrors Google Antigravity's own push-command matching — tolerates `git -C <p>` /
+# `git -c k=v` global options, as the hooks.json `run_command(git*push*)` matcher
+# does. That matcher also lets through e.g. `git stash push`; this regex is
+# what decides whether the command is a push.
+#
+# `gh pr create` is intentionally NOT a separate hooks.json matcher: gh runs
+# `git push` as a child process, which CC's matcher doesn't observe (it sees
+# only the top-level `gh pr create` argv). A separate `run_command(gh pr create:*)`
+# entry would buy minimal extra coverage (sessions that push only via gh) at
+# the cost of an extra python spawn on every `... && gh pr create` compound
+# (the common case). Those sessions are caught on their next standalone `git push`.
+# Matches `git push` (with optional `-c k=v` / `-C path` global options)
+# OR `gt submit` — Graphite's
+# stacked-PR push command. gt submit forwards to `git push` internally,
+# but the bash hook fires on Antigravity's top-level command so we need to
+# recognize gt submit at the matcher level. See #2048.
+_GIT_PUSH_RE = re.compile(
+    r'(?:\b' + _GIT_PROGRAM + _GIT_GLOBAL_OPTS + _WORD_GAP + r'push\b|\bgt' + _WORD_GAP + r'submit\b)'
+)
+
+# `git push` stdout: "abc1234..def5678  branch -> branch" (or `+abc..def` on
+# force, `* [new branch]` on first push). The left sha is where the remote
+# was BEFORE this push — exactly the base we need. Captures (old, new,
+# local-ref) so the handler can verify the pushed ref == HEAD before
+# diffing — `git push origin other` while on a different branch would
+# otherwise diff the wrong range.
+_PUSH_RANGE_RE = re.compile(
+    r'^\s*\+?\s*([0-9a-f]{7,40})\.\.\.?([0-9a-f]{7,40})\s+(\S+)\s+->\s+\S+',
+    re.MULTILINE,
+)
+
+MAX_PUSH_SWEEP_FILES = int(os.environ.get("SG_PUSH_SWEEP_MAX_FILES", "30"))
+MAX_PUSH_SWEEP_RANGE = int(os.environ.get("SG_PUSH_SWEEP_MAX_RANGE", "50"))
+PUSH_SWEEP_REPORT_CAP = int(os.environ.get("SG_PUSH_SWEEP_REPORT_CAP", "3"))
+# How long a push review waits for a commit review that is still running on
+# the pushed commits, before reviewing them itself. Longer than the agentic
+# race delay, so a commit review that fell back to single-shot can finish.
+try:
+    INFLIGHT_WAIT_S = int(os.environ.get("SG_INFLIGHT_WAIT_S", "") or 240)
+except ValueError:
+    INFLIGHT_WAIT_S = 240
+
+# Word pairs a shell `case` pattern (`*git*commit*|*git*push*|...`) would look
+# for in the raw hook input: wider than _GIT_COMMIT_RE / _GIT_PUSH_RE, so a
+# command those match always contains one of these pairs in this order.
+_SHELL_PRECHECK_PAIRS = (
+    ("git", "commit"), ("git", "push"),
+    ("gt", "create"), ("gt", "modify"), ("gt", "submit"),
+)
+# One in this many unmatched run_command calls reports, to keep the row count down.
+_UNMATCHED_BASH_SAMPLE = 10
+# Set when a command that is reviewed would not have passed the text check.
+_precheck_miss = False
+
+
+def _shell_precheck_passes(raw):
+    """True when `raw` holds one of _SHELL_PRECHECK_PAIRS, first word first.
+
+    Measurement only. Tells how many hook starts that match no commit or push
+    a text check in the launcher could avoid (`precheck_skip`), and whether
+    that check would ever drop a command that is reviewed (`precheck_miss`).
+    """
+    for first, second in _SHELL_PRECHECK_PAIRS:
+        at = raw.find(first)
+        if at != -1 and raw.find(second, at + len(first)) != -1:
+            return True
+    return False
+
+
+def _unmatched_bash_sampled(input_data):
+    """Pick the same one call in _UNMATCHED_BASH_SAMPLE in every start of it.
+
+    One run_command call can start this hook once per hooks.json entry, so the choice
+    is made from the call's id: all its starts report or none do. A call with
+    no id is not reported.
+    """
+    tool_use_id = input_data.get("tool_use_id")
+    if not isinstance(tool_use_id, str) or not tool_use_id:
+        return False
+    digest = hashlib.sha256(tool_use_id.encode("utf-8", "replace")).digest()
+    return int.from_bytes(digest[:4], "big") % _UNMATCHED_BASH_SAMPLE == 0
+
+
+_bash_hook_git_dir = {}
+
+
+def _bash_hook_sentinel(input_data, route="once"):
+    """The file one spawn of this run_command call's hook creates to claim `route`,
+    or None when there is nothing to tell the spawns apart by."""
+    tuid = input_data.get("tool_use_id")
+    cwd = input_data.get("cwd")
+    if not tuid or not cwd:
+        return None
+    command = (input_data.get("tool_input") or {}).get("command", "") or ""
+    call = (tuid, cwd, command)
+    if call not in _bash_hook_git_dir:
+        _bash_hook_git_dir[call] = _git_dir(
+            _git_toplevel(cwd)
+            or toplevel_from_command(command, cwd, COMMIT_SUBCOMMANDS | PUSH_SUBCOMMANDS)
+            or gitutil.session_repo_instead_of(cwd)
+            or cwd
+        )
+    gd = _bash_hook_git_dir[call]
+    if not gd:
+        return None
+    # Sanitize tuid into a filesystem-safe basename — defensive, the value is
+    # CC-generated (toolu_<b64ish>), but it ends up in a path.
+    safe = re.sub(r"[^A-Za-z0-9_-]", "_", tuid)[:80]
+    # A second route ("push") lets the other spawn of a commit-and-push run
+    # its own review, once.
+    return os.path.join(gd, f"sg-hook-once-{safe}" + ("" if route == "once" else f"-{route}"))
+
+
+def _claim_bash_hook_once(input_data, route="once"):
+    """De-dupe across hooks.json `if` matchers firing for the same run_command call.
+
+    `git commit -m x && git push` matches both `run_command(git*commit*)` and
+    `run_command(git*push*)` `if` configs, and a command CC cannot parse runs every
+    `if` config → CC spawns this script more than once with the
+    SAME `tool_use_id`. The first spawn atomically creates a
+    sentinel under `.git/`; subsequent spawns see it and exit early. Avoids
+    redundant LLM calls (and the redundant asyncRewake) on compound commands.
+
+    Returns True if this spawn won the claim (or no de-dupe is possible),
+    False if another spawn already claimed it.
+
+    Sentinel is per-clone (`.git/sg-hook-once-<tool_use_id>`), not /tmp,
+    so concurrent CC sessions in *different* repos don't collide. Stale
+    sentinels (older than a hook can run) are GC'd opportunistically.
+    """
+    sentinel = _bash_hook_sentinel(input_data, route)
+    if not sentinel:
+        return True
+    gd = os.path.dirname(sentinel)
+    # GC: best-effort sweep of stale sentinels so they don't accumulate.
+    import time as _time
+    now = _time.time()
+    try:
+        for name in os.listdir(gd):
+            if name.startswith("sg-hook-once-"):
+                p = os.path.join(gd, name)
+                try:
+                    if now - os.path.getmtime(p) > 900:
+                        os.unlink(p)
+                except OSError:
+                    pass
+    except OSError:
+        pass
+    try:
+        fd = os.open(sentinel, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.close(fd)
+        command = (input_data.get("tool_input") or {}).get("command", "") or ""
+        if (route == "once" and _GIT_COMMIT_RE.search(command)
+                and _GIT_PUSH_RE.search(command)):
+            # The push spawn of this command waits for this one to end.
+            diffstate.hold_until_exit(sentinel)
+        return True
+    except FileExistsError:
+        return False
+    except OSError:
+        # Can't write sentinel (read-only fs, perms) — proceed rather than
+        # silently dropping the review.
+        return True
+
+def is_push_sweep_enabled():
+    """Gate for the push-sweep PostToolUse[run_command] hook.
+
+    Enabled by default. ENABLE_COMMIT_REVIEW=0 remains the unconditional
+    kill switch (push-sweep reuses the same review pipeline and budget).
+    SG_PUSH_SWEEP is the per-user override (=1/on or =0/off) checked
+    next so users can opt out.
+    """
+    if not ENABLE_COMMIT_REVIEW:
+        return False
+    v = os.environ.get("SG_PUSH_SWEEP", "").strip().lower()
+    if v in ("1", "on"):
+        return True
+    if v in ("0", "off"):
+        return False
+    return True
+
+PUSH_SWEEP_ENABLED = is_push_sweep_enabled()
+
+def _compute_push_sweep_base(prev_upstream, push_range, reviewed):
+    """Advance the diff base past the contiguous reviewed prefix.
+
+    Spec: review `git diff B..HEAD` where `B` is the newest commit such that
+    `prev_upstream..B` is entirely in `reviewed`. Returns (B, unreviewed_tail).
+    `B == None` means the whole range is reviewed (caller should skip).
+    `push_range` must be oldest→newest.
+
+    Examples (✓=reviewed, ✗=not):
+      [✓1, ✗2, ✓3]  → B=1, tail=[2,3]   (cannot trim suffix; view_file is at HEAD)
+      [✓1, ✓2, ✓3]  → B=None            (all reviewed → skip)
+      [✗1, ✓2, ✗3]  → B=prev_upstream, tail=[1,2,3]
+      []            → B=None
+    """
+    i = 0
+    while i < len(push_range) and push_range[i] in reviewed:
+        i += 1
+    if i == len(push_range):
+        return None, []
+    base = push_range[i - 1] if i > 0 else prev_upstream
+    return base, push_range[i:]
+
+def _push_sweep_base_with_merges(prev_upstream, push_range, reviewed, parents):
+    """Choose the base when the range has merge commits.
+
+    The reviewed prefix can end on a merged-in branch, and a diff from there
+    holds everything the first parent has that the merged-in branch lacks:
+    code this push did not add. So the base must be on HEAD's first-parent
+    line, or be `prev_upstream`.
+
+    A merge on that line whose history in the range is all reviewed brought in
+    nothing unreviewed. Such merges are returned as `settled`: only what each
+    one resolved itself still needs a look.
+
+    Returns (base, settled). `push_range` must be in topological order, HEAD
+    last.
+    """
+    first_parent_line = set()
+    sha = push_range[-1]
+    while sha in parents:
+        first_parent_line.add(sha)
+        sha = parents[sha][0] if parents[sha] else None
+    settled = []
+    covered = 0
+    for sha in push_range:
+        if sha not in reviewed:
+            if len(parents.get(sha, ())) < 2 or sha not in first_parent_line:
+                break
+            settled.append(sha)
+        covered += 1
+    base = next((s for s in reversed(push_range[:covered]) if s in first_parent_line),
+                prev_upstream)
+    return base, settled
+
+def _merge_resolved_diff_files(repo_root, merges):
+    """{path: combined-diff hunks} of what `merges` resolved themselves, or
+    None if git failed."""
+    resolved = {}
+    for sha in merges:
+        files = _git_merge_resolved_files(repo_root, sha)
+        if files is None:
+            return None
+        for path, hunks in files:
+            resolved[path] = resolved[path] + "\n" + hunks if path in resolved else hunks
+    return resolved
+
+
+# Files renamed into review that one review takes, by priority, how much of
+# the prompt they get, and the time for the git calls behind it.
+MAX_RENAMED_IN = 10
+RENAMED_IN_BYTES = DIFF_TOTAL_BYTES // 4
+RENAMED_IN_TIMEOUT_S = 15
+
+
+def _with_renamed_in(repo_root, diff_files, renamed, cap):
+    """`diff_files` plus, whole, files renamed into review (see
+    renamed_into_review). `renamed` is (name, git arguments that show it, the
+    commit they end at) per file. Returns (files, whether git failed to show
+    some of them).
+
+    No file reviewed without them is dropped or cut because of them: a new
+    entry goes behind the others in a place they leave free, and a file
+    already there for an edit becomes the whole of it plus the lines the edit
+    removed. The rest is reviewed as before.
+    """
+    origin = {}
+    for name, revs, rev in renamed:
+        origin.setdefault(name, (revs, rev))
+    if not origin or len(diff_files) > cap:
+        return diff_files, False
+    there = dict(diff_files)
+    room = cap - len(diff_files)
+    by_revs = {}
+    for name, _ in _prioritize_diff_files([(n, "") for n in origin], MAX_RENAMED_IN)[0]:
+        if there.get(name, "").startswith("@@@"):
+            continue  # a merge's own hunks, in another format
+        if name not in there:
+            if room <= 0:
+                continue
+            room -= 1
+        by_revs.setdefault(origin[name], []).append(name)
+
+    deadline = time.monotonic() + RENAMED_IN_TIMEOUT_S
+
+    def left():
+        return max(deadline - time.monotonic(), 0.1)
+
+    whole, failed = {}, False
+    for (revs, rev), names in by_revs.items():
+        secret = came_from_secret(repo_root, rev, names, left())
+        names = [n for n in names if secret is not None and n not in secret]
+        shown = git_diff_unpaired(repo_root, revs, names, left()) if names else {}
+        failed = failed or secret is None or shown is None or len(shown) < len(names)
+        whole.update((name, hunks) for name, hunks in (shown or {}).items() if hunks)
+
+    def size(hunks):
+        # With room for the marker a cut file ends in.
+        return min(len(hunks), DIFF_PER_FILE_BYTES) + 100
+
+    budget = min(RENAMED_IN_BYTES,
+                 DIFF_TOTAL_BYTES - sum(size(hunks) for _, hunks in diff_files))
+    taken = {}
+    for name, hunks in whole.items():
+        if name in there:
+            removed = [ln for ln in there[name].split("\n") if ln.startswith(("@@", "-"))]
+            hunks = "\n".join([hunks, *removed])
+            if len(hunks) > DIFF_PER_FILE_BYTES:
+                continue
+        if size(hunks) <= budget:
+            budget -= size(hunks)
+            taken[name] = hunks
+    if taken:
+        debug_log(f"{len(taken)} file(s) renamed from a text name")
+        _TAIL_METRICS["renamed_in"] = len(taken)
+    files = [(name, taken.pop(name, hunks)) for name, hunks in diff_files]
+    return files + list(taken.items()), failed
+
+
+def _push_section(bash_output):
+    """Return the slice of `bash_output` that contains the push's range lines.
+
+    `_PUSH_RANGE_RE` is not push-specific — `git fetch` and `git pull` print
+    range lines (`abc..def  branch -> origin/branch`) in the same format. On
+    chained calls the run_command tool returns combined stdout+stderr, so a naive
+    `_PUSH_RANGE_RE.finditer(bash_output)` matches both sections and a
+    fetch+push compound trips the multi-ref skip.
+
+    `git push` prints `To <remote>` immediately before its range lines;
+    `git fetch`/`git pull` prints `From <remote>` before theirs. The slice
+    is symmetric: start at the LAST `To <remote>` header (strips fetch output
+    that ran *before* the push, e.g. `git fetch && git push`), and end at
+    the next `From <remote>` after that (strips fetch output that ran
+    *after* the push, e.g. `git push && git fetch`).
+
+    If no `To ` header is present (push failed before connecting, output
+    suppressed by `-q`) the full buffer is returned and the caller's
+    other guards handle it.
+    """
+    if not bash_output:
+        return ""
+    # Match line-anchored "To " — look for "\nTo " or "To " at start-of-string.
+    idx = bash_output.rfind("\nTo ")
+    if idx >= 0:
+        section = bash_output[idx:]
+    elif bash_output.startswith("To "):
+        section = bash_output
+    else:
+        return bash_output
+    # Strip a trailing fetch/pull `From <remote>` block (push && fetch /
+    # push && pull, or any wrapper that re-syncs after the push).
+    end = section.find("\nFrom ")
+    if end >= 0:
+        section = section[:end]
+    return section
+
+def _push_in_output(bash_output):
+    """True when run_command output shows a git push that updated a remote branch."""
+    section = _push_section(bash_output or "")
+    if not section.lstrip("\n").startswith("To "):
+        return False
+    return bool(_PUSH_RANGE_RE.search(section)) or "[new branch]" in section
+
+# Only words the failed-review notice; `gh pr create` alone is not routed to
+# the push review.
+_MAY_PUSH_VIA_GH_RE = re.compile(r"\bgh\s+pr\s+create\b")
+
+def _detect_prev_upstream(repo_root, bash_output):
+    """Where the remote was BEFORE this push.
+
+    Preference order:
+      1. Parse `abc..def` from push stdout — authoritative, exact.
+      2. `<branch>@{u}@{1}` — the remote-tracking ref's reflog position before
+         this push moved it. PostToolUse runs after `git push` completes, so
+         `@{u}` is already updated and `@{u}@{1}` is the prior value.
+      3. merge-base with the detected main branch — first push of a new
+         branch (`* [new branch]` in output, no upstream reflog yet).
+    Returns a resolvable ref/sha or None.
+    """
+    m = _PUSH_RANGE_RE.search(_push_section(bash_output or ""))
+    if m:
+        return m.group(1)
+    # @{u}@{1} — only meaningful if an upstream is configured.
+    for ref in ("@{u}@{1}", "@{push}@{1}"):
+        try:
+            # See #2099: stdout is a SHA but stderr can carry non-ASCII git
+            # warnings — keep bytes raw to avoid cp1252 reader-thread crash.
+            r = subprocess.run(
+                [*GIT_CMD, "rev-parse", "--verify", "-q", ref],
+                cwd=repo_root, capture_output=True, timeout=5,
+            )
+            sha = r.stdout.decode("utf-8", errors="replace").strip()
+            if r.returncode == 0 and sha:
+                return sha
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            pass
+    main = _detect_main_branch(repo_root)
+    if main:
+        try:
+            # See #2099: drop text=True; decode bytes manually so a
+            # cp1252-undefined byte in git's stderr doesn't crash the
+            # reader thread.
+            r = subprocess.run(
+                [*GIT_CMD, "merge-base", "HEAD", main],
+                cwd=repo_root, capture_output=True, timeout=5,
+            )
+            sha = r.stdout.decode("utf-8", errors="replace").strip()
+            if r.returncode == 0 and sha:
+                return sha
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            pass
+    return None
+
+def is_commit_review_enabled():
+    """Gate for the commit-review PostToolUse[run_command] hook.
+
+    Commit review is enabled by default; ENABLE_COMMIT_REVIEW=0 remains the
+    unconditional kill switch and SECURITY_GUIDANCE_COMMIT_REVIEW (on/off)
+    remains a legacy per-user override; everything else defaults on.
+    commit_review_on is still emitted in metrics for continuity.
+    """
+    if not ENABLE_COMMIT_REVIEW:
+        return False
+    override = os.environ.get("SECURITY_GUIDANCE_COMMIT_REVIEW", "").strip().lower()
+    if override in ("on", "off"):
+        return override == "on"
+    return True
+
+COMMIT_REVIEW_ENABLED = is_commit_review_enabled()
+
+_HOOK_STARTED = time.monotonic()
+
+# Seconds into the hook after which neither side of a commit or push review's
+# race waits for the other any longer; well inside Google Antigravity's 10-minute hook
+# timeout.
+_RACE_MAX_WAIT_S = 480
+# Seconds after which the review ends even if a side is still waiting on a
+# request that does not answer, with time left to tell the session before
+# Google Antigravity kills the hook. The inner CLI exits with the hook. The same limit
+# holds for a commit or push review's single-shot review outside a race.
+_RACE_END_S = 570
+# Seconds after which a failed commit review stops waiting for the push review
+# of its own command, which may run to the limit above on a later clock.
+_HOOK_LAST_WAIT_S = 580
+# api_error for a race that hit that deadline with no verdict.
+_RACE_TIMED_OUT = -2
+
+def _hook_spent_s() -> float:
+    return time.monotonic() - _HOOK_STARTED
+
+def _single_shot_review(
+    diff_files: List[Tuple[str, str]],
+    previous_findings: List[Dict[str, Any]],
+) -> Tuple[Optional[str], List[Dict[str, Any]], Dict[str, Any]]:
+    """A single-shot review as (guidance, vulns, metrics); failures are in the
+    metrics, not raised."""
+    try:
+        g, v = analyze_code_security(
+            diff_files, is_diff=True, previous_findings=previous_findings
+        )
+        # view_file on this thread: the outcome is per thread.
+        failed = llm.last_review_failed()
+        return g, v, {"agentic": False, "review_failed": failed,
+                      "api_error": llm.last_review_status() if failed else None}
+    except Exception as e:
+        debug_log(f"single-shot review crashed: {type(e).__name__}: {e}")
+        return None, [], {"agentic": False, "review_failed": True, "api_error": None}
+
+def _single_shot_review_in_time(
+    diff_files: List[Tuple[str, str]],
+    previous_findings: List[Dict[str, Any]],
+) -> Tuple[Optional[str], List[Dict[str, Any]], bool, Optional[int]]:
+    """A single-shot review outside a race, as (guidance, vulns, failed, status).
+
+    It ends at _RACE_END_S into the hook, whatever is pending.
+    """
+    done: List[Any] = []
+    worker = threading.Thread(
+        target=lambda: done.append(_single_shot_review(diff_files, previous_findings)),
+        daemon=True,
+    )
+    worker.start()
+    worker.join(timeout=max(0.0, _RACE_END_S - _hook_spent_s()))
+    if not done:
+        debug_log("single-shot review: nothing returned in time")
+        return None, [], True, _RACE_TIMED_OUT
+    g, v, m = done[0]
+    return g, v, m["review_failed"], m["api_error"]
+
+def _agentic_review_with_race(
+    repo_root: str,
+    diff_files: List[Tuple[str, str]],
+    rel_touched: List[str],
+    previous_findings: List[Dict[str, Any]],
+    spent_s: float = 0.0,
+) -> Tuple[Optional[str], List[Dict[str, Any]], Dict[str, Any]]:
+    """Race the agentic reviewer against a delayed single-shot fallback.
+
+    Agentic starts at t=0. After SG_AGENTIC_RACE_DELAY_S (default 180s), the
+    single-shot diff reviewer also starts. Whichever finishes first wins,
+    except that a single-shot review with no verdict waits for agentic up to
+    _RACE_MAX_WAIT_S from the start, and that if agentic fails after the
+    fallback started, the fallback's result (or, past the deadline, no
+    verdict) is returned so the caller never starts another review. If agentic
+    finishes before the delay, the fallback never runs.
+
+    `spent_s`, the time the hook has already run, comes off the delay and both
+    limits: the hook's time limit does not restart with the race.
+
+    Metrics added:
+      race_winner    : 1 = agentic won, 2 = fallback won (CC accepts only
+                       bool/finite-number metric values — strings would discard the dict)
+      race_delay_s   : the delay used
+      race_started   : 1 if the fallback was actually launched, else 0
+
+    Only the commit-review and push-sweep handlers call this — external
+    harnesses invoke agentic_review() directly and are unaffected. SG_AGENTIC_NO_RACE=1
+    disables the race for any other caller that wants pure agentic.
+    """
+    import queue as _queue
+    import threading as _th
+    import time as _t
+
+    if os.environ.get("SG_AGENTIC_NO_RACE") == "1":
+        return agentic_review(repo_root, diff_files, rel_touched)
+
+    delay_s = max(0, int(os.environ.get("SG_AGENTIC_RACE_DELAY_S", "180")) - int(spent_s))
+    if spent_s >= 1:
+        debug_log(f"Review race: {spent_s:.0f}s already spent, fallback starts after {delay_s}s")
+    q: "_queue.Queue[Tuple[str, Any]]" = _queue.Queue(maxsize=1)
+    fallback_started = _th.Event()
+    fallback_done = _th.Event()
+    agentic_done = _th.Event()
+    fallback_result: Dict[str, Any] = {}
+    deadline = _t.monotonic() + max(0.0, _RACE_MAX_WAIT_S - spent_s)
+    timed_out = (None, [], {"agentic": False, "review_failed": True, "api_error": _RACE_TIMED_OUT})
+
+    def _agentic() -> None:
+        try:
+            r = agentic_review(repo_root, diff_files, rel_touched)
+        except Exception as e:  # pragma: no cover — crash → let fallback win
+            r = (None, [], {"agentic_fallback": f"race_crash:{type(e).__name__}"})
+        try:
+            q.put_nowait(("agentic", r))
+        except _queue.Full:
+            pass
+        agentic_done.set()
+
+    def _fallback() -> None:
+        _t.sleep(delay_s)
+        if agentic_done.is_set():
+            return  # agentic finished within the delay — never start fallback
+        fallback_started.set()
+        result = _single_shot_review(diff_files, previous_findings)
+        fallback_result["r"] = result
+        fallback_done.set()
+        if result[2]["review_failed"]:
+            # A failed fallback does not win: the agentic review's inner
+            # CLI may still get a verdict where direct calls cannot.
+            agentic_done.wait(timeout=max(0.0, deadline - _t.monotonic()))
+        try:
+            q.put_nowait(("fallback", result))
+        except _queue.Full:
+            pass
+
+    _th.Thread(target=_agentic, daemon=True).start()
+    _th.Thread(target=_fallback, daemon=True).start()
+
+    try:
+        winner, (g, v, m) = q.get(timeout=max(0.0, _RACE_END_S - spent_s))
+    except _queue.Empty:
+        debug_log("review race: nothing returned in time")
+        winner, (g, v, m) = "fallback", timed_out
+    # What the agentic run saw of its directory, and how much work it did,
+    # is kept when the fallback's result replaces it below.
+    reviewer_context = (
+        {k: m[k] for k in (_REVIEWER_CONTEXT_KEYS + _REVIEWER_VERDICT_KEYS
+                           + _REVIEWER_EFFORT_KEYS) if k in m}
+        if winner == "agentic" else {}
+    )
+    if winner == "agentic" and m.get("agentic_fallback") and fallback_started.is_set():
+        # The caller would rerun the single-shot review the fallback has
+        # already started; use its result instead.
+        if fallback_done.wait(timeout=max(0.0, deadline - _t.monotonic())):
+            winner, (g, v, m) = "fallback", fallback_result["r"]
+        else:
+            winner, (g, v, m) = "fallback", timed_out
+    if winner == "agentic" and not m.get("agentic_fallback"):
+        # The agentic run reached the model; any failure on record is the
+        # fallback's, which lost.
+        llm._forget_failed_call()
+    m = {**m, **reviewer_context}  # a copy: don't mutate the callee's metrics dict
+    m["race_winner"] = 1 if winner == "agentic" else 2
+    m["race_delay_s"] = delay_s
+    m["race_started"] = 1 if fallback_started.is_set() else 0
+    return g, v, m
+
+def _review_failure_reason(status):
+    """(failure type, reason, likely cause or "") for a review with no verdict.
+
+    `status` is llm.last_review_status(): an HTTP status, -1 for a network
+    error or timeout, None when the reply could not be read; or
+    _RACE_TIMED_OUT.
+    """
+    gateway = (", or an LLM gateway may need its key in ANTHROPIC_CUSTOM_HEADERS"
+               if os.environ.get("ANTHROPIC_BASE_URL", "").strip() else "")
+    if status == _RACE_TIMED_OUT:
+        return ("timeout", "the review did not finish in time", "")
+    if llm._is_3p_provider():
+        return ("provider", "the review through the cloud provider got no answer",
+                "The plugin's log has the provider's error.")
+    if llm._gateway_cli:
+        pinned = os.environ.get("SECURITY_REVIEW_MODEL", "").strip()
+        return ("gateway", "the review through Google Antigravity on the Antigravity apps gateway returned no result",
+                "The plugin's log has the reason. If it says the sign-in has expired, run /login again."
+                + (f" SECURITY_REVIEW_MODEL ({pinned}) may also name a model the gateway does "
+                   "not serve." if pinned else ""))
+    if status == 401:
+        return ("auth", "the API rejected the plugin's credentials (HTTP 401)",
+                f"The sign-in may have expired or been revoked{gateway}.")
+    if status == 403:
+        return ("auth", "the API refused access (HTTP 403)",
+                f"The account may lack access to the review model{gateway}.")
+    if status == 429 or (isinstance(status, int) and status >= 500):
+        return ("busy", f"the API was busy or unavailable (HTTP {status})",
+                "This is usually temporary.")
+    if status == -1:
+        return ("network", "the model could not be reached (network error or timeout)", "")
+    if isinstance(status, int):
+        pinned = os.environ.get("SECURITY_REVIEW_MODEL", "").strip()
+        return ("request", f"the API refused the request (HTTP {status})",
+                f"SECURITY_REVIEW_MODEL ({pinned}) may name a model this account "
+                "cannot use." if pinned else "")
+    return ("reply", "the model's reply could not be read", "")
+
+
+def _left_out_files_notice(session_id, repo_root, untracked, diff_output):
+    """(one line for the terminal, text for Antigravity) naming the source files a
+    failed `git add -N` kept out of this Stop review, or None.
+
+    Each set of files gets one notice a session: the wake ends in another Stop
+    that fails the same way, and a notice there would wake Antigravity for ever. So
+    no notice unless the mark is saved. A repository whose index cannot be
+    copied without its nested repositories fails at every Stop and gets one.
+    Paths are JSON quoted in ASCII: a file name can hold a line break.
+    """
+    in_diff = set(extract_file_paths_from_diff(diff_output or ""))
+
+    def has_content(p):
+        try:
+            return os.path.getsize(os.path.join(repo_root, p)) > 0
+        except OSError:
+            return False
+
+    names = sorted(p for p in untracked or ()
+                   if p not in in_diff and _is_reviewable_source(p) and has_content(p))
+    if not names:
+        return None
+    which = [repo_root] if gitutil._add_failed["code"] // 100000 == 5 else names
+    key = "new_files_left_out:" + hashlib.sha256(
+        "\0".join(which).encode("utf-8", "replace")).hexdigest()[:16]
+    if not atomic_check_and_mark_warning(session_id, key):
+        return None
+    if key not in load_state(session_id).get("shown_warnings", ()):
+        return None
+    _TAIL_METRICS["add_fail_told"] = len(names)
+    shown = ", ".join(json.dumps(p) for p in names[:_LEFT_OUT_NAMES_SHOWN])
+    if len(names) > _LEFT_OUT_NAMES_SHOWN:
+        shown += f" and {len(names) - _LEFT_OUT_NAMES_SHOWN} more"
+    return (f"Security review left out new files: {shown}. Log: {DEBUG_LOG_FILE}",
+            f"The security review did not see these new files, so it did not "
+            f"review them: {shown}. git could not add them to the review's "
+            f"diff. Tell the user this in one sentence, and that details are "
+            f"in {DEBUG_LOG_FILE}.")
+
+
+def _push_review_takes_over(input_data):
+    """True when the push spawn of this commit-and-push call waits to review
+    what this commit review has no verdict on."""
+    command = input_data["tool_input"]["command"]
+    sentinel = _bash_hook_sentinel(input_data, "push")
+    return bool(
+        PUSH_SWEEP_ENABLED and sentinel and _GIT_PUSH_RE.search(command)
+        # It may still be on its way to the wait when a review fails at once.
+        and diffstate.becomes_held(sentinel, 3))
+
+
+def _push_review_settled_it(input_data):
+    """Let the push review that waits for this commit review go on, and wait
+    for its end. False when it ended without a verdict and told nobody (a cap,
+    no network, killed): that is for the commit review to report."""
+    debug_log("Commit review: got no verdict; waiting for the push review of the same command")
+    diffstate._release_inflight()
+    diffstate.release_hold(_bash_hook_sentinel(input_data))
+    diffstate.wait_for_holder(_bash_hook_sentinel(input_data, "push"),
+                              max(0.0, _HOOK_LAST_WAIT_S - _hook_spent_s()))
+    return os.path.exists(_bash_hook_sentinel(input_data, "settled"))
+
+
+def _exit_review_failed(kind, session_id, metrics, status, pushed="no", told=None):
+    """End a commit ("Commit") or push ("Push") review that got no verdict.
+
+    Never reports the code as clean. Tells Antigravity once per session for each
+    kind of review and failure; repeats are only logged. `pushed` ("yes",
+    "maybe" or "no"): whether the commit's own command also pushed it;
+    "taken_over" when that command's push review dealt with it. `told` is
+    called when Antigravity is told. Exits.
+    """
+    failure, reason, cause = _review_failure_reason(status)
+    debug_log(f"{kind} review: got no verdict ({reason}); not marked reviewed")
+    metrics = {"review_failed": True,
+               **({"api_error": status} if status is not None else {}),
+               **metrics, "vulns_found": 0}
+    # A commit its own command pushed gets its own notice: no later push
+    # re-checks it.
+    told_key = f"review_failed:{kind}:{failure}" + (":pushed" if pushed == "yes" else "")
+    if pushed == "taken_over" or not atomic_check_and_mark_warning(session_id, told_key):
+        emit_metrics(metrics)
+        sys.exit(0)
+    subject = "this push" if kind == "Push" else "this commit"
+    if kind == "Push":
+        after = ("It was for the pushed commits not already reviewed when they "
+                 "were committed, and a later push will not re-check them.")
+    elif pushed == "yes":
+        after = "The same command pushed it, so a later push will not re-check it."
+    elif not PUSH_SWEEP_ENABLED:
+        after = ""
+    elif pushed == "maybe":
+        after = ("If the same command pushed it, a later push will not re-check "
+                 "it; otherwise a later push from Google Antigravity will.")
+    else:
+        after = "If it is pushed later from Google Antigravity, the push review will check it."
+    notice = " ".join(part for part in (
+        f"The security review of {subject} did not complete: {reason}.", cause, after,
+        f"Tell the user this in one sentence, and that details are in {DEBUG_LOG_FILE}.",
+    ) if part)
+    # The notice goes on stderr: Google Antigravity shows Antigravity an asyncRewake
+    # hook's stderr, else its stdout, which carries the metrics line.
+    sys.stderr.write(PROVENANCE_BANNER + "\n\n" + notice + "\n")
+    sys.stderr.flush()
+    emit_metrics(metrics,
+                 rewake_summary=(f"{kind} security review did not complete: {reason}. "
+                                 f"Log: {DEBUG_LOG_FILE}"))
+    if told:
+        told()
+    sys.exit(2)
+
+def _commit_in_output(bash_output):
+    """The commit that a successful `git commit` printed, or None."""
+    # Require BOTH a line-anchored `[branch sha]` AND a git-only diffstat
+    # signal before treating the tool call as a successful commit. The old
+    # `any()` check false-positived on (a) pre-commit/husky/lint-staged hooks
+    # emitting labels like `[pre-commit abc1234]`, and on (b) chained
+    # `git commit || git log --stat` where `N files changed` appears in output
+    # even though the commit itself failed.
+    #
+    # Take only the LAST match: pre-commit/husky hooks can print bracketed
+    # labels like `[pre-commit abc1234]` that precede the real `[branch sha]`
+    # line; chained commands like `git commit && git commit` produce multiple
+    # real SHAs and we want the most recent. The real commit line is always
+    # last in git's own output — the earlier matches are either decoys or
+    # superseded commits.
+    all_shas = _COMMIT_SHA_RE.findall(bash_output)
+    if all_shas and any(p.search(bash_output) for p in _COMMIT_DIFFSTAT_PATTERNS):
+        return all_shas[-1]
+    return None
+
+
+def _commit_review_candidates(bash_output, repo_root):
+    """(shas, stale): the commits the commit review of a run_command call that was
+    not interrupted takes, newest first, before it leaves out those already
+    reviewed or under review: the one its output names, else the fresh ones in
+    the reflog, with the count of entries too old. Both the commit review and
+    the push review of the same call choose by this."""
+    named = _commit_in_output(bash_output)
+    return ([named], 0) if named else _git_reflog_recent_commits(repo_root)
+
+
+def handle_commit_review_posttooluse(input_data):
+    """PostToolUse handler for run_command — reviews git commits for security issues.
+
+    Runs as asyncRewake: detects `git commit` in the run_command command, parses
+    the resulting SHA(s) from the run_command stdout `[branch sha] msg` line, runs
+    `git show -p <sha>` per SHA, sends the combined diff through
+    analyze_code_security, and exits with code 2 (stderr findings) to wake
+    the model. Deduplicates against the shared previous_findings state so
+    the Stop hook won't re-flag the same (filePath, vulnerableCode) pair.
+    """
+    session_id = input_data.get("session_id", "default")
+    _USAGE_CONTEXT["review"] = "commit"
+    tool_input = input_data.get("tool_input", {})
+    tool_response = input_data.get("tool_response", {})
+    cwd = input_data.get("cwd", "")
+
+    command = tool_input.get("command", "")
+    if not isinstance(command, str) or not _GIT_COMMIT_RE.search(command):
+        # hooks.json's `"if": "run_command(git*commit*)"` only keeps CC from
+        # spawning python3 for ls/grep/etc. It lets through other git commands
+        # with "commit" in them (`git merge --no-commit`), and CC runs the hook
+        # anyway when it cannot parse the command; this regex decides.
+        sys.exit(0)
+
+    debug_log(f"Commit review: detected git commit in command")
+
+    # run_command tool_response has no exit_code field (only stdout, stderr,
+    # interrupted), so success is inferred from the output text — the same
+    # heuristic Google Antigravity itself uses.
+    if not isinstance(tool_response, dict):
+        tool_response = {}
+    stdout = tool_response.get("stdout", "") or ""
+    stderr = tool_response.get("stderr", "") or ""
+    bash_output = stdout + "\n" + stderr
+    interrupted = bool(tool_response.get("interrupted"))
+
+    all_shas = _COMMIT_SHA_RE.findall(bash_output)
+    diffstate.note_seen_commits(session_id, all_shas)
+    named = None if interrupted else _commit_in_output(bash_output)
+    commit_succeeded = bool(named)
+
+    # commit_review_on emitted on every path so telemetry can filter on
+    # commit_review and group by commit_review_on.
+    _base = {"commit_review": True, "commit_review_on": COMMIT_REVIEW_ENABLED}
+
+    cwd_root = _git_toplevel(cwd) if cwd else None
+    repo_root = cwd_root
+    repo_res = RES_CWD if cwd_root else RES_NONE
+    if cwd:
+        _cmd_root = toplevel_from_command(command, cwd, COMMIT_SUBCOMMANDS, cwd_root)
+        if _cmd_root and _cmd_root != cwd_root:
+            repo_root, repo_res = _cmd_root, RES_COMMAND
+    # A commit made where the hooks stay out is not one of this repository, or
+    # of the one an earlier turn worked in.
+    _hint = not gitutil.in_left_out_repo(cwd)
+    if cwd and not _cmd_root and command_in_left_out_repo(command, cwd, COMMIT_SUBCOMMANDS):
+        repo_root, repo_res, _hint = None, RES_NONE, False
+    if not cwd_root:
+        _base["cwd_is_repo"] = False
+    if repo_res != RES_CWD:
+        _base["repo_resolution"] = repo_res
+
+    # Reflog fallback for hidden stdout. Analysis of skip_reason=21 emissions
+    # showed a large share were commits that DID succeed
+    # but whose `[branch sha]` line was hidden by piping/redirection/-q
+    # (e.g., `git commit -m ... 2>&1 | tail -3`). A HEAD@{0}
+    # reflog check substantially reduced this skip; follow-up analysis found
+    # the residual is dominated by (a) chained commands moving HEAD@{0} past
+    # `commit:` (`git commit && git push`), and (b) the `_obvious_noop` guard
+    # false-positiving on chained `git status` output after a successful -q
+    # commit. Widening to the last-5-entries × 120s scan and dropping the noop
+    # guard fixes both. The reviewed-shas dedup below prevents the wider window
+    # from re-reviewing a prior run_command call's commit, and is the same file
+    # push-sweep reads — so a SHA is reviewed at most once across both
+    # surfaces. See _git_reflog_recent_commits docstring for cross-repo /
+    # race safety.
+    _reflog_shas: List[str] = []
+    _skip_21_sub = 0
+    if not commit_succeeded and not interrupted and cwd:
+        if not repo_root:
+            repo_root = load_repo_hint(session_id) if _hint else None
+            if repo_root:
+                repo_res = RES_HINT
+                _base["repo_resolution"] = repo_res
+        _root = repo_root
+        _fresh, _stale = _commit_review_candidates(bash_output, _root)
+        diffstate.note_seen_commits(session_id, _fresh)
+        if _fresh:
+            # Commits an earlier call's review is still working on are that
+            # review's: it records them when it has a verdict. (view_file before
+            # the reviewed set, so one that ends in between counts as reviewed.)
+            _inflight = _load_inflight_shas(_root, _fresh)
+            _already = _load_reviewed_shas(_root)
+            _reflog_shas = [s for s in _fresh
+                            if s not in _already and s not in _inflight]
+            if _reflog_shas:
+                commit_succeeded = True
+                debug_log(
+                    f"Commit review: stdout had no `[branch sha]`; reflog "
+                    f"shows {len(_reflog_shas)} fresh unreviewed commit(s) "
+                    f"({_reflog_shas[0][:12]}...)"
+                )
+            else:
+                # Fresh commit(s) in reflog but all already in
+                # sg-reviewed-shas — likely a run_command retry or the commit was
+                # reviewed via a prior fire. Correct to skip; sub=2 lets telemetry
+                # split this from genuine fails. sub=5: at least one is still
+                # being reviewed by an earlier call.
+                _skip_21_sub = 5 if any(s not in _already for s in _fresh) else 2
+        elif _stale:
+            _skip_21_sub = 3  # commit entries exist but all >120s old
+        else:
+            _skip_21_sub = 4  # no commit-action entries — genuine fail
+
+    if not commit_succeeded:
+        debug_log("Commit review: commit did not succeed, skipping")
+        emit_metrics({"skipped": True, "skip_reason": 21, **_base,
+                      **({"skip_21_sub": 1} if interrupted
+                         else {"skip_21_sub": _skip_21_sub} if _skip_21_sub
+                         else {})})
+        sys.exit(0)
+
+    if not COMMIT_REVIEW_ENABLED:
+        debug_log("Commit review: disabled, skipping")
+        emit_metrics({"skipped": True, "skip_reason": 32, **_base})
+        sys.exit(0)
+
+    off = _llm_review_off(session_id)
+    if off:
+        debug_log(f"Commit review: {off[0]}")
+        emit_metrics({"skipped": True, "skip_reason": 22, **off[1], **_base})
+        sys.exit(0)
+
+    if not ensure_anthropic_reachable():
+        debug_log("Commit review: api.anthropic.com unreachable")
+        emit_metrics({"skipped": True, "skip_reason": 24, **_base})
+        sys.exit(0)
+
+    if not cwd:
+        debug_log("Commit review: no cwd")
+        emit_metrics({"skipped": True, "skip_reason": 25, **_base})
+        sys.exit(0)
+
+    if not repo_root and named:
+        # cwd is in a repository here only when the command named a left-out one.
+        repo_root = repo_containing_commit(named, scan_roots(cwd_root or cwd))
+        if repo_root:
+            repo_res = RES_SHA_SCAN
+    if not repo_root:
+        repo_root = load_repo_hint(session_id) if _hint else None
+        if repo_root:
+            repo_res = RES_HINT
+    if repo_res != RES_CWD:
+        _base["repo_resolution"] = repo_res
+    if not repo_root:
+        debug_log("Commit review: not in a git repo")
+        emit_metrics({"skipped": True, "skip_reason": 26, **_base})
+        sys.exit(0)
+    if repo_res != RES_CWD:
+        debug_log(f"Commit review: repo resolved via {repo_res} -> {repo_root!r}")
+        if repo_res in (RES_COMMAND, RES_TOUCHED_PATHS):
+            save_repo_hint(session_id, repo_root)
+
+    # Pin the review to the exact SHA the run_command command produced, parsed from
+    # its stdout. Reviewing HEAD instead is wrong when the commit was made in
+    # a different repo than the hook's cwd (`cd ../other && git commit && cd -`,
+    # subshells), or when a second commit lands before this async hook reaches
+    # `git show` — both would review an unrelated commit. The reflog-action
+    # fallback above is the narrow exception: it only fires when output gave
+    # us nothing AND the cwd repo's own reflog confirms a `commit:` just
+    # happened there, which rules out the cross-repo case.
+    if _reflog_shas:
+        # Output-based detection already failed above; the reflog SHAs are the
+        # authoritative ones. Don't re-parse bash_output here — any bracketed
+        # token it contains is by construction NOT the `[branch sha]` line
+        # (or commit_succeeded would have been True via the fast path). The
+        # list is newest-first and may contain >1 entry when a single run_command
+        # call made multiple commits (`git commit -m a && git commit -m b`);
+        # all are reviewed.
+        shas = _reflog_shas
+    else:
+        shas = [named] if named else []
+    if not shas:
+        debug_log("Commit review: no SHA in commit output")
+        emit_metrics({"skipped": True, "skip_reason": 33, **_base})
+        sys.exit(0)
+    if _reflog_shas:
+        # Observability: track how often the fallback path is hit so
+        # future analysis can split on it.
+        # `reflog_shas_n` lets telemetry measure how often the widened scan picked
+        # up >1 commit (i.e., chained `git commit && git commit`).
+        _base = {**_base, "sha_via_reflog": True,
+                 "reflog_shas_n": len(_reflog_shas)}
+
+    # `git commit --amend`: review only the delta added by the amend
+    # (pre-amend..post-amend) instead of the full amended commit. Without this,
+    # the amend re-reviews the entire commit including code already reviewed
+    # on the original commit, costing 30-60s of LLM time and re-flagging
+    # findings the user may have just amended IN ORDER TO fix. Pre-amend
+    # SHA comes from the reflog and is validated to be an amend (see
+    # _resolve_amend_pre_sha) — otherwise we fall back to full-commit review.
+    #
+    # Three guards skip the delta path and fall back to full `git show`
+    # review. All three close variants of "chained `git commit && git commit
+    # --amend` in one run_command call", which would otherwise enter the delta path,
+    # see an empty `git diff sha_wip sha_amend`, emit skip_reason=35, and
+    # silently drop the first commit's content from review (no prior
+    # PostToolUse fired for it — same run_command call):
+    #
+    # 1. `not _reflog_shas`: reflog fallback path was taken (both commits'
+    #    bash output suppressed via -q / pipe / redirect). The multi-SHA scan
+    #    already populates `shas` with every fresh commit (amend + any
+    #    pre-amend WIP) and the loop below `git show`s each, so coverage is
+    #    correct without delta — and the delta path doesn't compose with a
+    #    multi-SHA `shas` list (it would diff every entry against the same
+    #    pre-amend SHA). Losing the 30-60s saving on the reflog-fallback
+    #    fraction is an acceptable trade.
+    #
+    # 2. `len(all_shas) <= 1`: both commits visible (no -q). Two `[branch
+    #    sha]` lines in bash_output → all_shas len 2. Only defined on the
+    #    bash-output path; short-circuit ordering keeps it unevaluated when
+    #    `_reflog_shas` is non-empty.
+    #
+    # 3. `commit_invocations <= 1`: asymmetric — first commit -q, amend
+    #    visible. Fast-path fires on the amend's `[branch sha]` line (so
+    #    `_reflog_shas` stays empty), all_shas = [sha_amend] (len 1) — guards
+    #    1 and 2 both pass. The command string itself is the only remaining
+    #    signal that two commits happened. False-positives (e.g.
+    #    `git commit --amend -m "fix git commit bug"`) are safe — they fall
+    #    back to full review.
+    is_amend = bool(_GIT_AMEND_RE.search(command))
+    commit_invocations = len(_GIT_COMMIT_RE.findall(command))
+    pre_amend_sha = None
+    if (is_amend and not _reflog_shas and len(all_shas) <= 1
+            and commit_invocations <= 1):
+        pre_amend_sha = _resolve_amend_pre_sha(repo_root, expected_post_sha=shas[0])
+    if is_amend and pre_amend_sha:
+        _base = {**_base, "amend_delta_review": True}
+        debug_log(
+            f"Commit review: --amend detected; reviewing delta "
+            f"{pre_amend_sha[:12]}..{shas[-1][:12]}"
+        )
+
+    # --no-color: `color.ui=always` would emit ANSI escapes that corrupt
+    # parse_diff_into_files' header match. Bytes + errors='replace': commits
+    # can contain non-UTF8 source (latin-1, cp1252) and text=True would raise
+    # UnicodeDecodeError outside the except clause.
+    diff_files = []
+    renamed = []
+    resolved = 0
+    max_files = 10 * MAX_DIFF_FILES
+    for sha in shas:
+        try:
+            # core.quotePath=false: emit raw UTF-8 in `diff --git a/... b/...`
+            # headers so non-ASCII paths aren't C-quoted past the downstream
+            # parse_diff_into_files regex (sibling of #2056 / #2075). See #2082.
+            # core.quotePath=false comes from GIT_CMD globally (see gitutil.py).
+            if pre_amend_sha:
+                # Delta review: pre-amend → post-amend. `git diff` (not show)
+                # so the output is a pure unified diff with no commit header.
+                cmd = [*GIT_CMD, "diff", "--no-color", "--no-ext-diff", "--no-textconv",
+                       pre_amend_sha, sha, "--"]
+            else:
+                cmd = [*GIT_CMD, "show", "-p", "--no-color", "--no-ext-diff", "--no-textconv", sha, "--"]
+            result = gitutil._run_diff_bounded(
+                cmd, 15, _review_diff_keeper(max_files), cwd=repo_root)
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+            _cmd = "git diff" if pre_amend_sha else "git show"
+            debug_log(f"Commit review: {_cmd} {sha} error: {e}")
+            continue
+        if result.returncode != 0:
+            # SHA not in this repo (cross-repo commit) or already gc'd. Better
+            # to skip than to fall back to HEAD and review the wrong commit.
+            _cmd = "git diff" if pre_amend_sha else "git show"
+            debug_log(f"Commit review: {_cmd} {sha} rc={result.returncode}")
+            continue
+        resolved += 1
+        diff_text = result.stdout.decode("utf-8", errors="replace")
+        diff_files.extend(parse_diff_into_files(diff_text))
+        names = renamed_into_review(diff_text)
+        if names:
+            revs, rev = ("show", "--format=", sha), sha
+            if pre_amend_sha:
+                revs = ("diff", pre_amend_sha, sha)
+            elif sha != shas[0] and _is_ancestor(repo_root, sha, shas[0]):
+                # A later commit of the same call can have changed the file
+                # again: show it as the last one left it.
+                revs, rev = ("diff", f"{sha}^", shas[0]), shas[0]
+            renamed += [(name, revs, rev) for name in names]
+
+    # Dedup by path. The widened reflog scan can return >1 SHA (e.g.
+    # `git commit && git commit --amend` within 120s); a path that appears in
+    # both diffs would consume two MAX_DIFF_FILES slots and be re-analyzed.
+    # `shas` is newest-first so the first occurrence is the most recent
+    # version of the file — keep it.
+    if len(shas) > 1:
+        _seen = set()
+        diff_files = [
+            (fp, c) for fp, c in diff_files
+            if not (fp in _seen or _seen.add(fp))
+        ]
+
+    if resolved == 0:
+        debug_log("Commit review: no parsed SHA resolved in cwd repo")
+        emit_metrics({"skipped": True, "skip_reason": 28, **_base,
+                      "shas_found": len(shas), **_diff_read_metrics()})
+        sys.exit(0)
+
+    diff_files, _ = _with_renamed_in(repo_root, diff_files, renamed, MAX_DIFF_FILES)
+
+    # Empty amend delta = message-only amend (or whitespace-only that the
+    # diff already collapses). No code to review; skip cleanly. skip_reason=35.
+    # Gated on resolved > 0 so subprocess failures (caught with `continue`
+    # above) don't get mislabeled as message-only — they fall through to
+    # skip_reason=28 correctly.
+    if pre_amend_sha and not diff_files:
+        debug_log("Commit review: --amend produced empty delta (message-only?), skipping")
+        # Same content under a new sha: as reviewed as the original is. With
+        # its review still running, see that end first. A push review of the
+        # new sha waits for this process meanwhile: wait less than it does, so
+        # that it can still review what has no verdict by then.
+        _new = _full_shas(repo_root, shas)
+        _mark_inflight(repo_root, _new)
+        reviewed, _waited = _reviewed_after_inflight(
+            repo_root, [pre_amend_sha], max(0.0, INFLIGHT_WAIT_S * 0.9 - _hook_spent_s()))
+        if pre_amend_sha in reviewed:
+            _append_reviewed_shas(repo_root, _new)
+        emit_metrics({"skipped": True, "skip_reason": 35, **_base,
+                      "files_reviewed": 0,
+                      **({"inflight_wait_s": max(1, int(round(_waited)))} if _waited else {}),
+                      **_diff_read_metrics()})
+        sys.exit(0)
+
+    debug_log(f"Commit review: {resolved}/{len(shas)} sha(s) resolved, "
+              f"{len(diff_files)} files")
+    if not diff_files:
+        debug_log("Commit review: no reviewable source files in commit")
+        emit_metrics({"skipped": True, "skip_reason": 30, **_base,
+                      **_diff_read_metrics()})
+        sys.exit(0)
+
+    # Large commits (initial scaffolds, big refactors) used to bail here with
+    # skip_reason=31. Large multi-file changes are exactly where
+    # cross-file source→sink vulns hide. Reviewing nothing is
+    # worse than reviewing the riskiest 30 — _cap_files_for_prompt already
+    # bounds total bytes downstream so this can't blow context.
+    # `diff_files_dropped` lets telemetry measure how often the prioritizer engages
+    # and how much it drops; skip_reason=31 is now reserved for the truly
+    # pathological case (e.g. >300 source files — almost certainly a bad
+    # baseline, not a real commit).
+    if len(diff_files) > max_files:
+        debug_log(f"Commit review: pathological diff ({len(diff_files)} files), skipping")
+        emit_metrics({"skipped": True, "skip_reason": 31, **_base,
+                      "diff_files_count": len(diff_files), **_diff_read_metrics()})
+        sys.exit(0)
+    diff_files, _dropped = _prioritize_diff_files(diff_files, MAX_DIFF_FILES)
+    if _dropped:
+        debug_log(f"Commit review: prioritized to {len(diff_files)} files "
+                  f"(dropped {_dropped} lower-risk)")
+        _base = {**_base, "diff_files_dropped": _dropped}
+
+    # Rolling-hour rate limit on LLM spend, so only burn a slot once we know
+    # we'll actually call analyze_code_security — skip 28/30/31/33 above are
+    # free. `rate_count` is emitted on every fire (not just rejections) so
+    # telemetry can show how close to the cap sessions run.
+    _allowed, _rate_n = atomic_check_rate_limit(
+        session_id, "CommitReview",
+        MAX_COMMIT_REVIEWS_PER_HOUR, COMMIT_REVIEW_RATE_WINDOW_S)
+    _base = {**_base, "rate_count": _rate_n}
+    if not _allowed:
+        debug_log("Commit review: hourly rate limit reached, skipping")
+        emit_metrics({"skipped": True, "skip_reason": 23, **_base})
+        sys.exit(0)
+
+    # view_file previous_findings for dedup (shared with Stop hook)
+    import time as _time
+    now = _time.time()
+
+    def _read_previous(state):
+        findings_ts = state.get("previous_findings_ts", 0)
+        if (now - findings_ts) > PREVIOUS_FINDINGS_TTL_SEC:
+            return []
+        return list(state.get("previous_findings", []))
+
+    previous_findings = with_locked_state(session_id, _read_previous) or []
+
+    # Tell a push review (or the next commit's reflog scan) that these commits
+    # are being reviewed, so it does not start a second review of them.
+    _mark_inflight(repo_root, _full_shas(repo_root, shas))
+    # Count only: keyed on what the reviewer is sent, after the byte caps.
+    _diff_token, _seen_m = _diff_review_started(
+        repo_root, _cap_files_for_prompt(diff_files), tip=shas[0])
+    _TAIL_METRICS.update(_seen_m)
+
+    review_start = _time.time()
+
+    agentic_metrics: Dict[str, Any] = {}
+    if _agentic_commit_review_enabled():
+        rel_touched = [fp for fp, _ in diff_files]
+        concrete_guidance, vulns, _am = _agentic_review_with_race(
+            repo_root, diff_files, rel_touched, previous_findings, spent_s=_hook_spent_s()
+        )
+        agentic_metrics.update(_am)
+        if _am.get("child_stderr"):
+            # Lines the inner CLI wrote to stderr during the review: how often
+            # the condition that used to replace the findings body occurs. Not
+            # counted when the single-shot fallback wins the race.
+            _TAIL_METRICS["child_stderr"] = _am["child_stderr"]
+        _note_reviewer_context(agentic_metrics)
+        review_failed = bool(agentic_metrics.get("review_failed"))
+        api_status = agentic_metrics.get("api_error")
+        # Fall back to single-shot only on agentic FAILURE (SDK/investigate
+        # crash). If agentic completed and returned 0 findings, trust that.
+        if agentic_metrics.get("agentic_fallback"):
+            concrete_guidance, vulns, review_failed, api_status = _single_shot_review_in_time(
+                diff_files, previous_findings
+            )
+    else:
+        concrete_guidance, vulns, review_failed, api_status = _single_shot_review_in_time(
+            diff_files, previous_findings
+        )
+
+    review_ms = int((_time.time() - review_start) * 1000)
+    # `survived` is the raw self-refute count BEFORE the high/critical-only
+    # severity filter; `survived_after_sev` is the count the user actually
+    # sees. Include `survived_after_sev` ONLY when the filter actually
+    # dropped candidates — otherwise it's redundant with `survived` and eats
+    # into CC's metric-key cap, pushing critical_count/high_count out of the
+    # emitted metrics.
+    #
+    # CC accepts only booleans and finite numbers as metric values.
+    # A null or string value makes CC discard the ENTIRE dict, so:
+    #   - candidates/survived are omitted when None (early-return at
+    #     candidates==0, or any fallback path)
+    #   - agentic_fallback is mapped to an int reason code; the string detail
+    #     stays in debug_log for diagnosis
+    _sev_raw = agentic_metrics.get("survived")
+    _sev_post = agentic_metrics.get("survived_after_sev")
+    _cand = agentic_metrics.get("candidates")
+    _fb = agentic_metrics.get("agentic_fallback")
+    # 1 = SDK import failed (antigravity_agent_sdk not installed)
+    # 2 = investigate stage failed (CLI/network/model error or schema-retry exhausted)
+    _fb_code = (1 if _fb and _fb.startswith("import:") else 2) if _fb else None
+    _race = agentic_metrics.get("race_winner")
+    _agentic_m = (
+        # `agentic` = which path produced the result, not which was attempted.
+        # On race-loss the _fallback() metrics dict has agentic=False — emitting
+        # True there blends the high-find-rate single-shot race-loss bucket into
+        # `agentic=true` queries and overstates agentic yield.
+        {"agentic": bool(agentic_metrics.get("agentic")),
+         **({"candidates": _cand} if _cand is not None else {}),
+         **({"survived": _sev_raw} if _sev_raw is not None else {}),
+         **({"survived_after_sev": _sev_post}
+            if _sev_post is not None and _sev_post != _sev_raw else {}),
+         **({"agentic_fallback": _fb_code} if _fb_code is not None else {}),
+         # 1 = agentic won, 2 = single-shot fallback won. review_ms already
+         # captures timing; race_winner lets telemetry segment recall by which path
+         # actually produced the result.
+         **({"race_winner": _race} if _race is not None else {})}
+        if agentic_metrics.get("agentic") or _fb or _race is not None
+        else {}
+    )
+
+    if review_failed:
+        # Not marked reviewed, so a later push review from Google Antigravity still
+        # covers it.
+        _exit_review_failed("Commit", session_id, {
+            **_base, **_agentic_m,
+            "files_reviewed": len(diff_files), "review_ms": review_ms,
+        }, api_status, pushed=(
+            "taken_over" if _push_review_takes_over(input_data)
+            and _push_review_settled_it(input_data)
+            else "yes" if _push_in_output(bash_output)
+            else "maybe" if _GIT_PUSH_RE.search(command) or _MAY_PUSH_VIA_GH_RE.search(command)
+            else "no"))
+
+    # push-sweep state: record this commit as reviewed (full 40-hex sha) so a
+    # later `git push` can advance its diff base past it. Recorded only after a
+    # review that got a verdict, whether or not it found anything. `shas` holds abbreviated refs from
+    # `[branch sha]`; resolve to full so set-membership in the push-sweep is
+    # exact. Best-effort; failures here never block the review result.
+    try:
+        full_shas = []
+        for s in shas:
+            # See #2099: drop text=True; decode manually for cp1252 safety.
+            r = subprocess.run(
+                [*GIT_CMD, "rev-parse", "--verify", "-q", s],
+                cwd=repo_root, capture_output=True, timeout=5,
+            )
+            if r.returncode == 0:
+                full_shas.append(r.stdout.decode("utf-8", errors="replace").strip())
+        _append_reviewed_shas(repo_root, full_shas, vulns_found=len(vulns or []))
+    except Exception:
+        pass
+    _diff_review_done(_diff_token)
+
+    if not concrete_guidance:
+        debug_log("Commit review: no security issues found")
+        emit_metrics({
+            "vulns_found": 0, **_base, **_agentic_m,
+            "files_reviewed": len(diff_files), "review_ms": review_ms,
+            **({
+                "api_error": llm._last_call_claude_http_error
+            } if llm._last_call_claude_http_error is not None else {}),
+        })
+        sys.exit(0)
+
+    # Late dedup: drop only what a concurrent Stop hook wrote while our LLM
+    # ran. Anything in `previous_findings` (the pre-LLM snapshot) that the
+    # LLM chose to re-flag is an intentional "fix incomplete" verdict.
+    new_vulns, n_deduped = _dedup_against_state(
+        session_id, vulns, prompted=_finding_keys(previous_findings)
+    )
+
+    if not new_vulns:
+        debug_log("Commit review: all findings already known, skipping")
+        emit_metrics({
+            "vulns_found": 0, **_base, **_agentic_m, "deduped": n_deduped,
+            "files_reviewed": len(diff_files), "review_ms": review_ms,
+        })
+        sys.exit(0)
+
+    # Record new findings into shared state. Key on (filePath, category) —
+    # vulnerableCode bytes drift between fires (diff context lines shift) so
+    # matching on it under-dedupes; this aligns with Stop's _record_fire.
+    finding_snapshots = [
+        {
+            "filePath": v.get("filePath", ""),
+            "category": v.get("category", "Unknown"),
+            "vulnerableCode": v.get("vulnerableCode", ""),
+        }
+        for v in new_vulns
+    ]
+
+    def _record_findings(state):
+        existing = [f for f in state.get("previous_findings", []) if isinstance(f, dict)]
+        seen = {(f.get("filePath", ""), f.get("category", "")) for f in existing}
+        for f in finding_snapshots:
+            key = (f["filePath"], f["category"])
+            if key not in seen:
+                seen.add(key)
+                existing.append(f)
+        state["previous_findings"] = existing
+        state["previous_findings_ts"] = _time.time()
+    with_locked_state(session_id, _record_findings)
+
+    sev = {"critical": 0, "high": 0, "medium": 0}
+    for v in new_vulns:
+        s = v.get("severity", "medium")
+        if s in sev:
+            sev[s] += 1
+
+    # Rebuild guidance from new_vulns only — concrete_guidance from the LLM
+    # still lists deduped entries. emit_metrics writes it to stderr, the body
+    # of the asyncRewake notice.
+    _commit_guidance = (PROVENANCE_BANNER + "\n\n"
+                        + _format_vulns_guidance(new_vulns)
+                        + CONTINUATION_SUFFIX + "\n")
+    emit_metrics({
+        "vulns_found": len(new_vulns), **_base, **_agentic_m,
+        "critical_count": sev["critical"], "high_count": sev["high"],
+        "files_reviewed": len(diff_files), "review_ms": review_ms,
+        **({"deduped": n_deduped} if n_deduped else {}),
+    }, rewake_summary=_format_vulns_summary(new_vulns, prefix="Commit security review found"),
+       additional_context=_commit_guidance,
+       hook_event_name="PostToolUse")
+
+    # exit(2) is preserved per the asyncRewake protocol — it's what CC
+    # uses as the "force fix" signal that triggers the rewakeMessage flow.
+    sys.exit(2)
+
+def _pushed_beyond_commit_review(repo_root, push_range, bash_output):
+    """True when a command that both commits and pushes sent out a commit no
+    review covers. The other spawn's commit review takes the commit the
+    output names last, or the reflog's fresh ones when the output hides them.
+    """
+    covered = []
+    if COMMIT_REVIEW_ENABLED:
+        covered = _commit_review_candidates(bash_output, repo_root)[0]
+    rest = [s for s in push_range if not any(s.startswith(c) for c in covered)]
+    return _without_review(repo_root, rest)
+
+
+def _without_review(repo_root, shas):
+    """True when one of `shas` is neither reviewed nor under review."""
+    # In that order: a review that ends in between then counts as reviewed.
+    held = _load_inflight_shas(repo_root, shas)
+    reviewed = _load_reviewed_shas(repo_root)
+    return any(s not in reviewed and s not in held for s in shas)
+
+
+def handle_push_sweep_posttooluse(input_data):
+    """Review the just-pushed range as one diff, advancing the base past the
+    contiguous prefix of already-per-commit-reviewed shas.
+
+    Spec: review `git diff B..HEAD` where `B` is the newest commit such that
+    `prev_upstream..B` is entirely in `.git/sg-reviewed-shas`. Skip if
+    `B == HEAD`. Mark `B..HEAD` reviewed afterward. With merges in the range,
+    see `_push_sweep_base_with_merges`.
+
+    Diff and view_file are both at HEAD (push doesn't move the working tree), so the
+    agentic reviewer sees a consistent view — a vuln introduced in commit A and
+    removed in commit B is absent from the net diff by construction. Any
+    reviewed commits in the tail (after the first unreviewed one) are included
+    in the diff; their findings are dropped by `_dedup_against_state` against
+    `previous_findings` the per-commit hook already recorded.
+
+    Metrics: `push_sweep: True` is the telemetry splitter; `pushed`/`unreviewed`/
+    `prefix_advanced` give the funnel; skip_reasons 40-49 are reserved for
+    this surface.
+    """
+    tool_input = input_data.get("tool_input", {}) or {}
+    tool_response = input_data.get("tool_response", {}) or {}
+    command = tool_input.get("command", "") or ""
+    cwd = input_data.get("cwd")
+    session_id = input_data.get("session_id", "")
+    _USAGE_CONTEXT["review"] = "push"
+    bash_output = (
+        (tool_response.get("stdout", "") or "")
+        + "\n"
+        + (tool_response.get("stderr", "") or "")
+    )
+    interrupted = tool_response.get("interrupted", False)
+
+    # Re-gate: hooks.json `if` matched (or CC could not parse the command
+    # and ran every entry), so confirm with the regex.
+    if not _GIT_PUSH_RE.search(command):
+        sys.exit(0)
+
+    _base = {"push_sweep": True, "push_sweep_on": PUSH_SWEEP_ENABLED}
+
+    if not PUSH_SWEEP_ENABLED:
+        emit_metrics({"skipped": True, "skip_reason": 40, **_base})
+        sys.exit(0)
+    if interrupted:
+        emit_metrics({"skipped": True, "skip_reason": 21, **_base})
+        sys.exit(0)
+    off = _llm_review_off(session_id)
+    if off:
+        emit_metrics({"skipped": True, "skip_reason": 22, **off[1], **_base})
+        sys.exit(0)
+    if not cwd:
+        emit_metrics({"skipped": True, "skip_reason": 25, **_base})
+        sys.exit(0)
+    _tip_m = _PUSH_RANGE_RE.search(_push_section(bash_output))
+    cwd_root = _git_toplevel(cwd)
+    repo_root, repo_res = resolve_repo_root(
+        cwd, command, PUSH_SUBCOMMANDS,
+        sha=_tip_m.group(2) if _tip_m else None,
+        session_id=session_id, cwd_root=cwd_root,
+    )
+    if repo_res == RES_HINT and gitutil.in_left_out_repo(cwd):
+        # Not a push of the repository an earlier turn worked in.
+        repo_root, repo_res = None, RES_NONE
+    if not cwd_root:
+        _base["cwd_is_repo"] = False
+    if repo_res != RES_CWD:
+        _base["repo_resolution"] = repo_res
+    if not repo_root:
+        emit_metrics({"skipped": True, "skip_reason": 26, **_base})
+        sys.exit(0)
+    if repo_res != RES_CWD:
+        debug_log(f"Push sweep: repo resolved via {repo_res} -> {repo_root!r}")
+        if repo_res in (RES_COMMAND, RES_TOUCHED_PATHS):
+            save_repo_hint(session_id, repo_root)
+
+    # Guard: the sweep diffs `base..HEAD` and the agent Reads the working
+    # tree, so the pushed ref MUST be HEAD or the review is of the wrong
+    # range. `git push origin other` while checked out elsewhere, or a
+    # multi-ref push, are skipped (skip_reason 44). Check the new-tip from
+    # the `abc..def  local -> remote` line against HEAD.
+    #
+    # Scope range-line detection to the push section of bash_output: a chained
+    # `git fetch && git push` produces fetch range lines that the regex would
+    # otherwise match too, false-tripping multi-ref. `_push_section` slices
+    # forward from the last `To <remote>` header.
+    #
+    # If there are no range lines, we MUST also see a positive push-success
+    # signal (`* [new branch]` or `Everything up-to-date`) AND verify the
+    # pushed local ref resolves to HEAD before falling through to the
+    # @{u}@{1}/merge-base detection. Without this, two real cases misdirect
+    # the sweep: `git push origin feature2` while on `feature1` (no range
+    # line, no HEAD check → reviews wrong branch and poisons reviewed-shas),
+    # and rejected pushes (no range line, no `interrupted` signal → reviews
+    # unpushed local commits and marks them reviewed). skip_reason=46 covers
+    # both.
+    head = None
+    try:
+        # See #2099: drop text=True; decode manually for cp1252 safety.
+        r = subprocess.run([*GIT_CMD, "rev-parse", "HEAD"], cwd=repo_root,
+                           capture_output=True, timeout=5)
+        head = r.stdout.decode("utf-8", errors="replace").strip() if r.returncode == 0 else None
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+    push_section = _push_section(bash_output or "")
+    range_matches = list(_PUSH_RANGE_RE.finditer(push_section))
+    if range_matches and head:
+        # Multi-ref push (multiple range lines) or pushed-tip ≠ HEAD → skip.
+        if len(range_matches) > 1:
+            emit_metrics({"skipped": True, "skip_reason": 44, **_base})
+            sys.exit(0)
+        new_tip = range_matches[0].group(2)
+        if not head.startswith(new_tip):
+            debug_log(f"Push sweep: pushed tip {new_tip} != HEAD {head[:12]}")
+            emit_metrics({"skipped": True, "skip_reason": 44, **_base})
+            sys.exit(0)
+    elif head:
+        # No range lines. Need a positive push-success signal — otherwise
+        # the push may have failed and we'd review unpushed local commits.
+        new_branch_matches = re.findall(
+            r"^\s*\*\s+\[new branch\]\s+(\S+)\s+->\s+\S+",
+            push_section, re.M)
+        up_to_date = "Everything up-to-date" in push_section
+        # `git push -q` suppresses all output on success. Distinguish quiet-
+        # success from a failed push (which has error text) by checking the
+        # upstream's reflog: a successful push leaves @{u}@{1} (the prior
+        # value) different from @{u} (now equal to HEAD). A rejected push
+        # would not advance @{u}, so this signal is push-specific.
+        quiet_success = False
+        if not (bash_output or "").strip() and not interrupted:
+            try:
+                # See #2099: drop text=True; decode manually for cp1252 safety.
+                r_cur = subprocess.run(
+                    [*GIT_CMD, "rev-parse", "--verify", "-q", "@{u}"],
+                    cwd=repo_root, capture_output=True, timeout=5)
+                r_prev = subprocess.run(
+                    [*GIT_CMD, "rev-parse", "--verify", "-q", "@{u}@{1}"],
+                    cwd=repo_root, capture_output=True, timeout=5)
+                cur = r_cur.stdout.decode("utf-8", errors="replace").strip() if r_cur.returncode == 0 else ""
+                prev_u = r_prev.stdout.decode("utf-8", errors="replace").strip() if r_prev.returncode == 0 else ""
+                quiet_success = bool(cur and prev_u and cur == head and prev_u != cur)
+            except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+                pass
+        if not (new_branch_matches or up_to_date or quiet_success):
+            debug_log("Push sweep: no push-success signal in bash output")
+            emit_metrics({"skipped": True, "skip_reason": 46, **_base})
+            sys.exit(0)
+        # `* [new branch] local -> remote`: verify the pushed local ref
+        # resolves to HEAD. `git push origin feature2` while on feature1
+        # would otherwise review feature1's commits and poison its
+        # reviewed-shas state.
+        for local_ref in new_branch_matches:
+            try:
+                # See #2099: drop text=True; decode manually for cp1252 safety.
+                r = subprocess.run(
+                    [*GIT_CMD, "rev-parse", "--verify", "-q", local_ref],
+                    cwd=repo_root, capture_output=True, timeout=5,
+                )
+                local_sha = r.stdout.decode("utf-8", errors="replace").strip() if r.returncode == 0 else ""
+            except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+                local_sha = ""
+            if local_sha and local_sha != head:
+                debug_log(f"Push sweep: new-branch {local_ref} ({local_sha[:12]}) != HEAD {head[:12]}")
+                emit_metrics({"skipped": True, "skip_reason": 44, **_base})
+                sys.exit(0)
+
+    prev_upstream = _detect_prev_upstream(repo_root, bash_output)
+    if not prev_upstream:
+        debug_log("Push sweep: could not determine prev_upstream")
+        emit_metrics({"skipped": True, "skip_reason": 41, **_base})
+        sys.exit(0)
+
+    # The tip that was pushed, checked above. HEAD itself may move meanwhile.
+    tip = head or "HEAD"
+    push_range = _git_rev_list_range(repo_root, prev_upstream, tip)
+    if not push_range:
+        emit_metrics({"skipped": True, "skip_reason": 42, **_base, "pushed": 0})
+        sys.exit(0)
+    if len(push_range) > MAX_PUSH_SWEEP_RANGE:
+        # Huge first-push of a long-lived branch — Stop hook is the backstop.
+        emit_metrics({"skipped": True, "skip_reason": 43, **_base,
+                      "pushed": len(push_range)})
+        sys.exit(0)
+
+    def _note_settled():
+        # Tells the commit spawn of this call that it has nothing to report.
+        if (_GIT_COMMIT_RE.search(command) and any(
+                s.startswith(c) for s in push_range
+                for c in _commit_review_candidates(bash_output, repo_root)[0])):
+            _claim_bash_hook_once(input_data, "settled")
+
+    _spawn_wait, _take_over = 0.0, False
+    if _GIT_COMMIT_RE.search(command) and not _pushed_beyond_commit_review(
+            repo_root, push_range, bash_output):
+        # All of it is the other spawn's to review. Once pushed, no later push
+        # covers it, so see that review end and take over what got no verdict.
+        # One that outlasts the wait, or cannot be watched, is left to it.
+        reviewed = _load_reviewed_shas(repo_root)
+        if any(s not in reviewed for s in push_range):
+            diffstate.hold_until_exit(_bash_hook_sentinel(input_data, "push"))
+            _ended, _spawn_wait = diffstate.wait_for_holder(
+                _bash_hook_sentinel(input_data), INFLIGHT_WAIT_S)
+            _take_over = _ended and _without_review(repo_root, push_range)
+            if _ended and not _take_over:
+                reviewed = _load_reviewed_shas(repo_root)
+                if all(s in reviewed for s in push_range):
+                    _note_settled()
+        # A commit the hourly cap kept out stays out.
+        _skip = (47 if not _take_over
+                 else 23 if atomic_check_rate_limit(
+                     session_id, "CommitReview", 0, COMMIT_REVIEW_RATE_WINDOW_S
+                 )[1] >= MAX_COMMIT_REVIEWS_PER_HOUR
+                 else 24 if not ensure_anthropic_reachable() else 0)
+        if _skip:
+            emit_metrics({"skipped": True, "skip_reason": _skip, **_base,
+                          "pushed": len(push_range),
+                          **({"inflight_wait_s": max(1, int(round(_spawn_wait)))}
+                             if _spawn_wait else {})})
+            sys.exit(0)
+
+    # A commit review that is still running on these commits records them
+    # once it has a verdict. Wait for it instead of reviewing the same diff a
+    # second time; if it ends without one, they are reviewed here.
+    reviewed, _waited = _reviewed_after_inflight(
+        repo_root, push_range, max(0.0, INFLIGHT_WAIT_S - _spawn_wait))
+    _waited += _spawn_wait
+    _wait_m = {}
+    if _waited:
+        _wait_m = {"inflight_wait_s": max(1, int(round(_waited)))}
+        debug_log(f"Push sweep: waited {_waited:.0f}s for a running commit review")
+    base, tail = _compute_push_sweep_base(prev_upstream, push_range, reviewed)
+    prefix_advanced = len(push_range) - len(tail)
+    _parents = _git_range_parents(repo_root, prev_upstream, tip) if base else {}
+    _settled = []
+    if any(len(p) > 1 for p in _parents.values()):
+        base, _settled = _push_sweep_base_with_merges(
+            prev_upstream, push_range, reviewed, _parents)
+    _resolved = _merge_resolved_diff_files(repo_root, _settled)
+    if _resolved is None:
+        # Could not read what a merge resolved: review the whole range instead.
+        base, _settled, _resolved = prev_upstream, [], {}
+    if _settled:
+        _TAIL_METRICS["merges_settled"] = len(_settled)
+    if base == prev_upstream:
+        prefix_advanced = 0
+    if base is None:
+        debug_log("Push sweep: every pushed commit already reviewed")
+        _note_settled()
+        emit_metrics({**_base, "pushed": len(push_range), "unreviewed": 0,
+                      "prefix_advanced": prefix_advanced, **_wait_m})
+        sys.exit(0)
+    _head_moved = bool(_waited and head and _git_rev_parse_head(repo_root) != head)
+    if _head_moved and not _take_over:
+        # Same guard as above: the agentic reviewer reads files at HEAD, and
+        # HEAD left the pushed tip during the wait. A take-over goes on without
+        # that reviewer, on the diff of the pushed tip.
+        debug_log("Push sweep: HEAD moved while waiting, skipping")
+        emit_metrics({"skipped": True, "skip_reason": 44, **_base, **_wait_m})
+        sys.exit(0)
+
+    debug_log(f"Push sweep: range={len(push_range)} prefix_advanced="
+              f"{prefix_advanced} base={base[:12]} tail={len(tail)}")
+
+    max_files = 10 * MAX_PUSH_SWEEP_FILES
+    diff_text = _git_diff_range(repo_root, base, tip,
+                                keeper=_review_diff_keeper(max_files))
+    if diff_text is None:
+        # Diff failed (non-zero exit / 30s timeout / git missing). Do NOT
+        # mark `tail` reviewed — we did not actually review it. Marking
+        # them would silently advance the prefix past unreviewed commits
+        # forever (the whole point of push-sweep is to catch outside-CC
+        # commits, and a 50-commit range over large files can hit the
+        # 30s timeout). skip_reason=45 lets a retry / smaller subsequent
+        # push still cover them, mirroring how skip_reason=31 handles
+        # too-many-files without recording the tail.
+        emit_metrics({**_base, "pushed": len(push_range),
+                      "unreviewed": len(tail), "skip_reason": 45,
+                      **_diff_read_metrics()})
+        sys.exit(0)
+    diff_files = parse_diff_into_files(diff_text)
+    for _path, _hunks in diff_files:
+        _resolved[_path] = _resolved[_path] + "\n" + _hunks if _path in _resolved else _hunks
+    diff_files, _unread = _with_renamed_in(
+        repo_root, list(_resolved.items()),
+        [(name, ("diff", base, head or "HEAD"), head or "HEAD")
+         for name in renamed_into_review(diff_text)],
+        MAX_PUSH_SWEEP_FILES)
+    if not diff_files and _unread:
+        # As for a failed diff above: there was something to review.
+        emit_metrics({**_base, "pushed": len(push_range),
+                      "unreviewed": len(tail), "skip_reason": 45})
+        sys.exit(0)
+    if not diff_files:
+        emit_metrics({**_base, "pushed": len(push_range),
+                      "unreviewed": len(tail), "skip_reason": 30,
+                      **_diff_read_metrics()})
+        # Still mark tail reviewed — there's nothing to review.
+        _append_reviewed_shas(repo_root, tail, vulns_found=0)
+        _note_settled()
+        sys.exit(0)
+    # Same prioritize-don't-bail logic as commit-review (see comment there).
+    # push-sweep ranges are net diffs over many commits so they hit the cap
+    # more often; reviewing the riskiest MAX_PUSH_SWEEP_FILES is strictly
+    # better than reviewing none. We still mark `tail` reviewed afterward —
+    # the dropped files are by construction the low-risk ones (config, .gen,
+    # tests, migrations), and NOT advancing the base would make the next
+    # push re-hit the same overflow with an even larger range. Per-commit
+    # review remains the primary surface for those files. The 10×
+    # pathological guard stays so a 500-file vendored-dir push doesn't burn
+    # a counter slot.
+    if len(diff_files) > max_files:
+        emit_metrics({**_base, "pushed": len(push_range),
+                      "unreviewed": len(tail), "skip_reason": 31,
+                      "diff_files_count": len(diff_files), **_diff_read_metrics()})
+        sys.exit(0)
+    diff_files, _dropped = _prioritize_diff_files(diff_files, MAX_PUSH_SWEEP_FILES)
+    if _dropped:
+        _base = {**_base, "diff_files_dropped": _dropped}
+
+    if _take_over:
+        _base["commit_no_verdict"] = True
+    _allowed, _rate_n = atomic_check_rate_limit(
+        session_id, "PushSweep",
+        MAX_COMMIT_REVIEWS_PER_HOUR, COMMIT_REVIEW_RATE_WINDOW_S)
+    _base = {**_base, "rate_count": _rate_n}
+    if not _allowed:
+        emit_metrics({"skipped": True, "skip_reason": 23, **_base})
+        sys.exit(0)
+
+    _mark_inflight(repo_root, tail)
+    _diff_token, _seen_m = _diff_review_started(
+        repo_root, _cap_files_for_prompt(diff_files), tip=tip)
+    _TAIL_METRICS.update(_seen_m)
+
+    import time as _time
+    now = _time.time()
+    previous_findings = with_locked_state(
+        session_id,
+        lambda s: list(s.get("previous_findings", []))
+        if (now - s.get("previous_findings_ts", 0)) <= PREVIOUS_FINDINGS_TTL_SEC
+        else []
+    ) or []
+
+    review_start = _time.time()
+    rel_touched = [fp for fp, _ in diff_files]
+    if _agentic_commit_review_enabled() and not _head_moved:
+        concrete_guidance, vulns, agentic_metrics = _agentic_review_with_race(
+            repo_root, diff_files, rel_touched, previous_findings, spent_s=_hook_spent_s(),
+        )
+        if agentic_metrics.get("child_stderr"):
+            _TAIL_METRICS["child_stderr"] = agentic_metrics["child_stderr"]
+        _note_reviewer_context(agentic_metrics)
+        review_failed = bool(agentic_metrics.get("review_failed"))
+        api_status = agentic_metrics.get("api_error")
+        if agentic_metrics.get("agentic_fallback"):
+            concrete_guidance, vulns, review_failed, api_status = _single_shot_review_in_time(
+                diff_files, previous_findings
+            )
+    else:
+        concrete_guidance, vulns, review_failed, api_status = _single_shot_review_in_time(
+            diff_files, previous_findings
+        )
+        agentic_metrics = {}
+    review_ms = int((_time.time() - review_start) * 1000)
+    if review_failed:
+        # Not marked reviewed. A later push does not re-check these commits:
+        # its range starts from the new upstream.
+        _exit_review_failed("Push", session_id, {
+            **_base, **_wait_m, "pushed": len(push_range), "unreviewed": len(tail),
+            "files_reviewed": len(diff_files), "review_ms": review_ms,
+        }, api_status, told=_note_settled)
+
+    # The tail is now covered by this net-diff review.
+    _append_reviewed_shas(repo_root, tail, vulns_found=len(vulns or []))
+    _note_settled()
+    _diff_review_done(_diff_token)
+
+    new_vulns, n_deduped = _dedup_against_state(
+        session_id, vulns or [], prompted=_finding_keys(previous_findings)
+    )
+
+    # Metrics — keep within CC's metric-key cap; agentic sub-metrics are dropped
+    # here in favour of the push-sweep funnel keys (telemetry can join on session_id
+    # to the per-commit fires for agentic detail). rewake_summary must ride
+    # this line (CC reads only the first {-prefixed stdout line); the emit
+    # is deferred to the two exit points below so the with-vulns path can
+    # also pass additional_context in the same emit_metrics call — the
+    # by-design "CC keeps only the first JSON line" constraint means we
+    # can't emit twice. Builds the shared metrics dict here; vulns path
+    # adds additional_context, no-vulns path emits as-is.
+    _push_metrics = {
+        **_base, "pushed": len(push_range), "unreviewed": len(tail),
+        "prefix_advanced": prefix_advanced, "vulns_found": len(new_vulns),
+        "files_reviewed": len(diff_files), "review_ms": review_ms,
+        **({"deduped": n_deduped} if n_deduped else {}),
+        **_wait_m,
+    }
+    _push_rewake_summary = _format_vulns_summary(new_vulns, prefix="Push security review found")
+
+    if not new_vulns:
+        debug_log("Push sweep: no new findings")
+        emit_metrics(_push_metrics, rewake_summary=_push_rewake_summary)
+        sys.exit(0)
+
+    # First-push of a big branch can surface many findings at once across
+    # week-old code. Report only the top-N by severity so the asyncRewake
+    # isn't a wall of text; the rest go to telemetry (vulns_found is the
+    # full count) and into previous_findings so Stop / next commit-review
+    # don't re-flag them. Stable sort: severity, then category for
+    # determinism in tests.
+    _sev_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    new_vulns.sort(key=lambda v: (_sev_rank.get(v.get("severity", "medium"), 2),
+                                  v.get("category", "")))
+    reported = new_vulns[:PUSH_SWEEP_REPORT_CAP]
+    n_suppressed = len(new_vulns) - len(reported)
+
+    # Record only the REPORTED findings into shared state. previous_findings
+    # means "the user was told about this — don't repeat it"; suppressed
+    # findings were NOT told, so recording them would silently bury them
+    # against any future commit-review/Stop that touches the same code. The
+    # range is marked reviewed in `.git/sg-reviewed-shas` regardless, so the
+    # push-sweep itself won't re-find them; leaving them out of
+    # previous_findings keeps the door open for the per-commit hook to
+    # surface them later if the code is touched again.
+    snapshots = [
+        {"filePath": v.get("filePath", ""),
+         "category": v.get("category", "Unknown"),
+         "vulnerableCode": v.get("vulnerableCode", "")}
+        for v in reported
+    ]
+    def _record(state):
+        existing = [f for f in state.get("previous_findings", [])
+                    if isinstance(f, dict)]
+        seen = {(f.get("filePath", ""), f.get("category", "")) for f in existing}
+        for f in snapshots:
+            k = (f["filePath"], f["category"])
+            if k not in seen:
+                seen.add(k); existing.append(f)
+        state["previous_findings"] = existing
+        state["previous_findings_ts"] = _time.time()
+    with_locked_state(session_id, _record)
+
+    # Prefer the LLM's formatted guidance (richer context, fix suggestions)
+    # when NOTHING was dropped from the LLM's full vuln list; fall back to
+    # re-formatting from `reported` whenever either the cap suppressed
+    # findings OR `_dedup_against_state` dropped findings the user has
+    # already been shown. concrete_guidance is built against the LLM's
+    # full pre-dedup list, so leaking it past dedup re-surfaces findings
+    # the per-commit hook already reported (the [✓1, ✗2, ✓3] case where
+    # the tail reviewed commits' findings are in previous_findings).
+    if n_suppressed or n_deduped:
+        guidance = _format_vulns_guidance(reported) or ""
+    else:
+        guidance = concrete_guidance or _format_vulns_guidance(reported) or ""
+    # Emit metrics + additional_context together — single JSON line is the
+    # contract CC's hook parser expects; the guidance itself goes to stderr.
+    # exit(2) preserved as the asyncRewake "force fix" trigger (see comment
+    # near handle_commit_review_posttooluse).
+    emit_metrics(_push_metrics, rewake_summary=_push_rewake_summary,
+                 additional_context=(PROVENANCE_BANNER + "\n\n"
+                                     + guidance + CONTINUATION_SUFFIX + "\n"),
+                 hook_event_name="PostToolUse")
+    sys.exit(2)
+
+def _review_diff_keeper(max_files):
+    """Reads a commit or push diff (see gitutil._ReviewDiffKeeper). No review
+    sends more of a file than either cap; a negative per-file cap is none."""
+    chars = DIFF_PER_FILE_BYTES if DIFF_PER_FILE_BYTES >= 0 else DIFF_TOTAL_BYTES
+    return gitutil._ReviewDiffKeeper(max_files, max(0, min(chars, DIFF_TOTAL_BYTES)))
+
+
+def _diff_read_metrics():
+    """For a commit or push diff that ends without a review: MiB of git
+    output read and diffs that hit the timeout, when not zero."""
+    read = gitutil._diff_read
+    return {key: value for key, value in (("diff_mb", read["bytes"] >> 20),
+                                          ("diff_timeout", read["timeouts"])) if value}
+
+
+def _stop_diff_truncated():
+    """Bytes of reviewable diff the Stop review did not send: cut while
+    reading git's output, plus what the prompt caps dropped after that.
+    As the metric to emit, or nothing when there were none."""
+    n = llm._last_review_truncated_bytes + gitutil._diff_read["cut_bytes"]
+    return {"diff_truncated": n} if n else {}
+
+
+def handle_stop_hook(input_data):
+    """
+    Handle the Stop hook — final security check using git diff.
+    Diffs against the baseline SHA captured at UserPromptSubmit to review
+    only code changed during this turn. Runs two Haiku analyses and
+    exits with code 2 to force Antigravity to continue and fix issues.
+
+    Also sweeps pending pattern warnings to emit a session-level
+    fixed/unresolved tally; the sweep needs no LLM and measures
+    pattern-rule efficacy.
+    """
+    session_id = input_data.get("session_id", "default")
+    stop_hook_active = input_data.get("stop_hook_active", False)
+    cwd = input_data.get("cwd", "")
+    hook_event_name = input_data.get("hook_event_name") or "Stop"
+    is_subagent = hook_event_name == "SubagentStop"
+
+    # Recursion guard FIRST — consume_stop_state clears touched_paths, and CC
+    # sets stop_hook_active session-wide while any asyncRewake Stop is in
+    # flight, so a concurrent active=True fire winning the lock would discard
+    # paths the concurrent active=False fire needs.
+    if stop_hook_active:
+        debug_log("Stop hook: stop_hook_active=True, skipping to avoid recursion")
+        emit_metrics({"skipped": True, "skip_reason": 1})
+        sys.exit(0)
+
+    # Snapshot all state under one lock BEFORE any slow work (sweep file I/O,
+    # git, network). asyncRewake Stop runs in the background; the next turn's
+    # UPS/PostToolUse can fire while we're still here. The snapshot is immune
+    # to those writes — they affect the NEXT Stop fire's snapshot.
+    snap = (consume_stop_state(session_id, clear=False) if is_subagent
+            else consume_stop_state(session_id))
+    fire_count = snap["fire_count"]
+    touched_paths = snap["touched_paths"]
+    baseline_sha = snap["baseline_sha"]
+    snap_baseline = baseline_sha  # pre-reassignment value for restore-on-transient-skip
+    head_at_capture = snap["head_at_capture"]
+    untracked_at_baseline = snap.get("untracked_at_baseline") or {}
+    previous_findings = snap["previous_findings"]
+    if not is_subagent and not portable_output():
+        _request_turn_commits(session_id, cwd, snap["turn_started"])
+    # Only when it happened: state lost to an unreadable file, and saves that
+    # overwrote another hook's (possible only without locking). SubagentStop
+    # does not clear them, so it does not report them either.
+    if not is_subagent:
+        for _k in ("state_resets", "state_overwrites"):
+            if isinstance(snap.get(_k), int) and snap[_k] > 0:
+                _TAIL_METRICS[_k] = snap[_k]
+
+        _cr_pack = diffstate.custom_rule_pack(snap.get("custom_rules"))
+        if _cr_pack:
+            _TAIL_METRICS["cr_pack"] = _cr_pack
+
+    # Sweep pattern-warning outcomes (pure local work; stop_hook_active is
+    # already guaranteed False here so no double-count guard needed).
+    sweep = {}
+    (warn_fixed, warn_unresolved, warn_unresolved_mask,
+     warn_fired_mask) = sweep_pending_warnings(session_id)
+    if warn_fixed or warn_unresolved:
+        sweep = {
+            "warn_fixed": warn_fixed,
+            "warn_unresolved": warn_unresolved,
+            "warn_unresolved_mask": warn_unresolved_mask,
+        }
+    # The two masks also ride the tail, so the reviewed rows below, which
+    # leave `sweep` or its mask out, carry them when there is room under the
+    # key cap. Per rule they give how often it fired and how often the
+    # flagged code was still there at Stop. warn_fired_mask goes after
+    # warn_unresolved_mask: a row cut at the cap loses it first, and a row
+    # without it is left out of the per-rule read instead of counting its
+    # rules as fixed.
+    if warn_unresolved_mask:
+        _TAIL_METRICS["warn_unresolved_mask"] = warn_unresolved_mask
+    if warn_fired_mask:
+        _TAIL_METRICS["warn_fired_mask"] = warn_fired_mask
+
+    v2_metrics = {}
+    left_out = False
+    restore_paths = touched_paths
+
+    def _left_out_notice():
+        # Asked for as the row goes out: the mark must not outlive a hook
+        # killed during the review.
+        if not left_out:
+            return None
+        return _left_out_files_notice(session_id, repo_root, untracked, diff_output)
+
+    def _left_out_wake():
+        """emit_metrics arguments that wake Antigravity to say new files were left out."""
+        notice = _left_out_notice()
+        if not notice:
+            return {}
+        return {"rewake_summary": notice[0], "hook_event_name": hook_event_name,
+                "additional_context": (PROVENANCE_BANNER + "\n\n" + notice[1]
+                                       + CONTINUATION_SUFFIX + "\n")}
+
+    def _skip(reason, restore=False, **extra):
+        if restore:
+            restore_unreviewed_stop_state(session_id, restore_paths, snap_baseline)
+        wake = _left_out_wake()
+        # CC truncates metrics to 10 keys by
+        # insertion order. v2_metrics (3) must precede sweep (3) so the v2
+        # diagnostics survive when extra adds touched_paths_count + ip_* keys.
+        emit_metrics({
+            "skipped": True, "skip_reason": reason, "fire_index": fire_count + 1,
+            **v2_metrics, **extra, **sweep,
+            **({"diff_hdr_unparsed": len(gitutil._unparsed_diff_headers)}
+               if gitutil._unparsed_diff_headers else {}),
+            **({"secret_shaped_skipped": len(gitutil._secret_shaped_skipped)}
+               if gitutil._secret_shaped_skipped else {}),
+        }, **wake)
+        sys.exit(2 if wake else 0)
+
+    # Limit stop hook firings per asyncRewake loop to prevent infinite loops.
+    # fire_count auto-expires after STOP_LOOP_STATE_TTL_SEC so a stale count
+    # from a prior turn doesn't block this one.
+    if MAX_STOP_HOOK_FIRINGS > 0 and fire_count >= MAX_STOP_HOOK_FIRINGS:
+        debug_log(f"Stop hook: already fired {fire_count} times (max {MAX_STOP_HOOK_FIRINGS}), skipping")
+        _skip(2)
+
+    off = _llm_review_off(session_id)
+    if off:
+        debug_log(f"Stop hook: {off[0]}")
+        # When the sign-in check gave no answer, this turn's changes are kept
+        # for the next Stop review.
+        _skip(3, restore=llm._gateway_check_unanswered, **off[1])
+
+    # Stop-hook-only kill switch — placed after consume_stop_state so
+    # touched_paths is still cleared each turn (a disabled Stop hook that
+    # never consumed state would accumulate stale paths) and after the sweep
+    # so pattern-warning efficacy metrics still emit. The commit/push reviews
+    # have their own gates (ENABLE_COMMIT_REVIEW / ENABLE_CODE_SECURITY_REVIEW).
+    if not ENABLE_STOP_REVIEW:
+        debug_log("Stop hook: ENABLE_STOP_REVIEW=0")
+        # 50+ for opt-out skips that aren't push-sweep (which owns 40-49).
+        _skip(50)
+
+    if not ensure_anthropic_reachable():
+        debug_log("Stop hook: api.anthropic.com unreachable")
+        _skip(10, restore=True)
+
+    if not cwd:
+        debug_log("Stop hook: no cwd")
+        _skip(4)
+
+    _own_cmds = gitutil.session_repo_commands() if not is_subagent else 0
+    if _own_cmds:
+        # Bits, see session_repo_commands(). No other row sends this key.
+        _TAIL_METRICS["mode"] = _own_cmds
+
+    repo_cwd, repo_res = resolve_repo_root(
+        cwd, touched_paths=touched_paths, session_id=session_id)
+    if repo_res in (RES_NONE, RES_HINT):
+        # The prompt hook took its baseline there.
+        _session_repo = gitutil.session_repo_instead_of(cwd)
+        if _session_repo:
+            repo_cwd, repo_res = _session_repo, RES_HINT
+    res_metrics = ({} if repo_res == RES_CWD
+                   else {"cwd_is_repo": False, "repo_resolution": repo_res})
+    if is_subagent and repo_cwd:
+        _pd = os.environ.get("CLAUDE_PROJECT_DIR")
+        _pd_root = _git_toplevel(_pd) if _pd and os.path.isdir(_pd) else None
+        if _pd_root and _pd_root != repo_cwd:
+            debug_log(f"Stop hook: SubagentStop in {repo_cwd!r}, session repo is {_pd_root!r}")
+            v2_metrics = dict(res_metrics)
+            _skip(11)
+    if repo_res != RES_CWD and repo_cwd:
+        debug_log(f"Stop hook: repo resolved via {repo_res} -> {repo_cwd!r}")
+        if not is_subagent and repo_res in (RES_COMMAND, RES_TOUCHED_PATHS):
+            save_repo_hint(session_id, repo_cwd)
+        cwd = repo_cwd
+
+    # The baseline belongs to the checkout the prompt hook captured it in.
+    # When the turn ends in another one (the session entered a worktree, or
+    # the edits were in a different repo), it says nothing about what changed
+    # here: this checkout's older commits would look like commits made this
+    # turn, and its files would be diffed against the other checkout's. Use
+    # what this checkout can say for itself instead: its own HEAD when the
+    # turn began (from its reflog) for commits, HEAD for file contents, and
+    # file times for which uncommitted files were already there.
+    origin = None
+    if repo_cwd:
+        try:
+            origin = baseline_origin(repo_cwd, snap_baseline, snap["baseline_root"])
+        except Exception as e:
+            debug_log(f"Stop hook: baseline origin check failed: {e}")
+    foreign_baseline = origin in FOREIGN_ORIGINS
+    since_ns = None
+    if foreign_baseline:
+        at = snap["prompt_at"]
+        at = at if isinstance(at, (int, float)) and 0 < at < 1e11 else None
+        baseline_sha = None
+        head_at_capture = _git_head_at(repo_cwd, at) if at else None
+        untracked_at_baseline = {}
+        since_ns = int(at * 1e9) if at else None
+        debug_log(f"Stop hook: baseline {str(snap_baseline)[:12]} is from another "
+                  f"checkout (origin {origin}); this one was at "
+                  f"{str(head_at_capture)[:12]} when the turn began")
+
+    review_paths, diff_base, repo_root, untracked, v2_metrics = compute_v2_review_set(
+        cwd, baseline_sha, head_at_capture, untracked_at_baseline, since_ns=since_ns
+    )
+    # Sent even when 0, once git status has worked.
+    if origin is not None and v2_metrics.get("dirty_now_count", -1) >= 0:
+        _TAIL_METRICS["bl_origin"] = baseline_origin_metric(origin, snap["baseline_kept"])
+
+    v2_metrics = {**res_metrics, **v2_metrics}
+    # Count-only view of how the review set relates to what the session's
+    # edit tools wrote. Only when a repo was read; never fails the review.
+    def _note_scope(files):
+        try:
+            if "scope" not in _scope:
+                _scope["scope"] = touched_scope(
+                    repo_root, input_data.get("cwd", ""), snap["turn_touched"])
+            # -1: the stored baseline could not be used in this repo.
+            fail = (3 if v2_metrics.get("changed_since_count") == -1
+                    else snap.get("baseline_fail"))
+            _TAIL_METRICS["review_scope"] = review_scope_code(
+                repo_root, *_scope["scope"], files, fail)
+        except Exception as e:
+            debug_log(f"review scope telemetry skipped: {e}")
+    _scope = {}
+    if v2_metrics.get("dirty_now_count", -1) >= 0:
+        _note_scope(review_paths)
+    if not review_paths:
+        debug_log("Stop hook: empty review set")
+        _skip(9, touched_paths_count=len(touched_paths))
+    debug_log(f"Stop hook: review_set={len(review_paths)} base={diff_base[:12]} dirty_now={v2_metrics['dirty_now_count']} changed_since={v2_metrics['changed_since_count']}")
+    if (len(review_paths) > MAX_REVIEW_SET_PATHS
+            and sum(_is_reviewable_source(os.path.relpath(p, repo_root))
+                    for p in review_paths) > MAX_REVIEW_SET_PATHS):
+        debug_log(f"Stop hook: pathological review set (more than "
+                  f"{MAX_REVIEW_SET_PATHS} paths), skipping")
+        _skip(8)
+    # Run from repo_root so the toplevel-relative review_paths resolve.
+    # Diff CONTENT against the turn-start snapshot (baseline_sha) so the LLM
+    # sees only this-turn edits — diffing against HEAD includes the user's
+    # pre-turn uncommitted WIP, which inflates review_ms and can re-flag
+    # the same pre-existing pattern every turn. The file LIST still comes
+    # from git state (compute_v2_review_set), so run_command/subagent edits are
+    # caught either way. Fall back to diff_base (HEAD/head_at_capture)
+    # when the baseline commit is missing or pruned.
+    content_base = baseline_sha or diff_base
+    diff_output = get_git_diff(repo_root, content_base, full_context=False,
+                               paths=review_paths, untracked_paths=untracked)
+    if (diff_output is None and content_base != diff_base
+            and "gave_up" not in gitutil._path_list_too_long):
+        debug_log(f"Stop hook: diff against {content_base[:12]} failed — falling back to {diff_base}")
+        diff_output = get_git_diff(repo_root, diff_base, full_context=False,
+                                   paths=review_paths, untracked_paths=untracked)
+    # Only when it happened: a failed `git add -N` (first, so a row at CC's key
+    # cap keeps it), MiB of git diff output read, reviewable files whose diff
+    # was cut while reading it, diffs that hit the timeout.
+    for _k, _v in (("add_fail", gitutil._add_failed["code"]),
+                   ("diff_mb", gitutil._diff_read["bytes"] >> 20),
+                   ("diff_cut_files", gitutil._diff_read["cut_files"]),
+                   ("diff_timeout", gitutil._diff_read["timeouts"])):
+        if _v:
+            _TAIL_METRICS[_k] = _v
+    # filter_preexisting_from_diff needs a resolvable pre-turn ref; fall
+    # back to HEAD when UPS never captured a baseline (print mode).
+    if not baseline_sha:
+        baseline_sha = "HEAD"
+
+    # New files a failed `git add -N` hid: when nothing gets reviewed they are
+    # put back, listed as touched so the next prompt keeps this baseline even
+    # if an edit tool never wrote them. A review of the tracked files goes on
+    # without them, rather than repeating that review every turn.
+    left_out = gitutil._add_failed["left_out"]
+    if left_out:
+        restore_paths = list(touched_paths) + [
+            os.path.join(repo_root, p) for p in untracked or ()]
+
+    if not diff_output or not diff_output.strip():
+        if "gave_up" in gitutil._path_list_too_long:
+            debug_log("Stop hook: changed paths do not fit the git commands, skipping")
+            _skip(8)
+        if "none_reviewable" in gitutil._path_list_too_long:
+            debug_log("Stop hook: no source code files among the changed paths")
+            _skip(7)
+        debug_log("Stop hook: no changes since baseline")
+        _skip(6, restore=left_out)
+
+    diff_hash = hashlib.sha256(diff_output.encode("utf-8", "replace")).hexdigest()
+    if snap.get("reviewed_diff_hash") == diff_hash:
+        debug_log("Stop hook: diff already reviewed by SubagentStop")
+        _skip(12)
+
+    # Parse diff into per-file content
+    diff_files = parse_diff_into_files(diff_output)
+    if not diff_files:
+        debug_log("Stop hook: no source code files in diff")
+        _skip(7, restore=left_out)
+
+    # Mirror commit-review: hard-bail only on pathological diffs (>300 files,
+    # usually a bad baseline), otherwise prioritize by security-risk path
+    # tokens and review the top MAX_DIFF_FILES. Stop is the only surface for
+    # uncommitted edits; the old hard-skip at >30 files dropped the 31-300
+    # bucket entirely, which is where cross-file source→sink vulns hide.
+    # _cap_files_for_prompt already bounds bytes downstream.
+    _stop_dropped = 0
+    if len(diff_files) > 10 * MAX_DIFF_FILES:
+        debug_log(f"Stop hook: pathological diff ({len(diff_files)} files > "
+                  f"{10 * MAX_DIFF_FILES}), skipping")
+        _skip(8, diff_files_count=len(diff_files))
+    if len(diff_files) > MAX_DIFF_FILES:
+        diff_files, _stop_dropped = _prioritize_diff_files(
+            diff_files, MAX_DIFF_FILES)
+        debug_log(f"Stop hook: prioritized to {len(diff_files)} files "
+                  f"(dropped {_stop_dropped} lower-risk)")
+
+    # Filter out pre-existing content from file rewrites
+    diff_files = filter_preexisting_from_diff(diff_files, cwd, baseline_sha)
+    if "scope" in _scope:
+        _note_scope([fp for fp, _ in diff_files])
+
+    debug_log(f"Stop hook: reviewing {len(diff_files)} changed files (standard diff)")
+    secret_named = gitutil.count_secret_named(diff_files)
+    if secret_named:
+        _TAIL_METRICS["secret_named_reviewed"] = secret_named
+
+    import time as _time
+    stop_review_start = _time.time()
+
+    # Stop hook is single-shot only. Agentic review is wired into
+    # handle_commit_review_posttooluse (PostToolUse on `git commit`) — commits
+    # are slower-OK and benefit from the deeper context-reading loop.
+    concrete_guidance, vulns = analyze_code_security(
+        diff_files, is_diff=True, previous_findings=previous_findings
+    )
+    # NOTE: analyze_security_concerns disabled — it produces too many false positives
+    # on pre-existing patterns in starter code. The concrete vulnerability analysis
+    # is more precise and has severity filtering (high/critical only).
+
+    stop_review_elapsed = _time.time() - stop_review_start
+    debug_log(f"Stop hook: LLM reviews took {stop_review_elapsed:.1f}s total")
+
+    review_ms = int(stop_review_elapsed * 1000)
+    fire_index = fire_count + 1
+
+    # Late dedup: drop only what a concurrent commit-review wrote while our
+    # LLM ran. Anything already in `previous_findings` (the consume_stop_state
+    # snapshot) that the LLM re-flagged is an intentional "fix incomplete"
+    # verdict and passes through.
+    if vulns:
+        vulns, n_deduped = _dedup_against_state(
+            session_id, vulns, prompted=_finding_keys(previous_findings)
+        )
+        if n_deduped and not vulns:
+            debug_log("Stop hook: all findings already delivered by commit-review")
+            _skip(35, deduped=n_deduped, review_ms=review_ms)
+        concrete_guidance = _format_vulns_guidance(vulns)
+
+    if concrete_guidance:
+        finding_snapshots = [
+            {
+                "filePath": v.get("filePath", ""),
+                "category": v.get("category", "Unknown"),
+                "vulnerableCode": v.get("vulnerableCode", ""),
+            }
+            for v in vulns
+        ]
+        # Update baseline so next stop hook iteration only sees new changes
+        new_sha = None if is_subagent else capture_git_baseline(cwd)
+        new_base_fail = diffstate.last_baseline_fail
+        new_untracked_baseline = _list_untracked(cwd) if new_sha else None
+        # After a baseline from another checkout, the rest of it is replaced
+        # too, below.
+        new_head = (_git_rev_parse_head(cwd)
+                    if new_sha and foreign_baseline and not head_at_capture else None)
+
+        def _record_fire(state):
+            if is_subagent:
+                state["reviewed_diff_hash"] = diff_hash
+            else:
+                state["stop_hook_fire_count"] = fire_index
+                state["stop_hook_fire_count_ts"] = _time.time()
+            # Re-read under lock — the commit-review PostToolUse hook may have
+            # appended findings since consume_stop_state snapshotted.
+            # Dedupe on (filePath, category) — vulnerableCode includes diff
+            # context lines that drift between fires, so byte-identical
+            # matching let the same finding accumulate as "new" each fire.
+            existing = [f for f in state.get("previous_findings", []) if isinstance(f, dict)]
+            seen = {(f.get("filePath", ""), f.get("category", "")) for f in existing}
+            for f in finding_snapshots:
+                key = (f["filePath"], f["category"])
+                if key not in seen:
+                    seen.add(key)
+                    existing.append(f)
+            state["previous_findings"] = existing
+            state["previous_findings_ts"] = _time.time()
+            if new_sha:
+                state["baseline_sha"] = new_sha
+                state["untracked_at_baseline"] = new_untracked_baseline
+                _store_baseline_fail(state, new_base_fail)
+                state["baseline_root"] = repo_root
+                state.pop("baseline_kept", None)
+                if foreign_baseline:
+                    # The stored HEAD is the other checkout's. Keep the one
+                    # this review used, so a later Stop this turn still sees
+                    # commits made (or amended) here since the prompt.
+                    state["head_at_capture"] = head_at_capture or new_head
+        with_locked_state(session_id, _record_fire)
+
+        if new_sha:
+            debug_log(f"Updated git baseline after stop hook: {new_sha[:12]}")
+
+        # Say so when a finding is in a file with no record of the session's
+        # edit tools writing it. Not when the state file was already found
+        # lost at the start of this Stop. Never fails the delivery.
+        no_record_note = ""
+        try:
+            if v2_metrics.get("dirty_now_count", -1) >= 0:
+                names, n_no_record = [], -1
+                if not (snap.get("state_resets") or snap.get("state_overwrites")):
+                    names, n_no_record = findings_without_edit_record(
+                        session_id, snap["turn_touched"], repo_root,
+                        input_data.get("cwd", ""),
+                        [v.get("filePath") for v in vulns],
+                        [fp for fp, _ in diff_files])
+                no_record_note = _no_edit_record_note(names)
+                # Findings in such files; -1 when the record was incomplete
+                # and no note was added. Sent even when 0 and after the review
+                # keys, so a row without it was cut by the key cap.
+                _TAIL_METRICS["finding_no_edit_record"] = n_no_record
+        except Exception as e:
+            debug_log(f"no-edit-record note skipped: {e}")
+
+        sev = {"critical": 0, "high": 0, "medium": 0}
+        for v in vulns:
+            s = v.get("severity", "medium")
+            if s in sev:
+                sev[s] += 1
+        # 8 base keys + at most 2 sweep keys = 10 (cap). Drop the mask here.
+        # untracked_baseline_n is the signal for whether the UPS-time
+        # untracked-snapshot capture actually ran.
+        sweep_trimmed = {k: v for k, v in sweep.items() if k != "warn_unresolved_mask"}
+        left_out_notice = _left_out_notice()
+        # Guidance goes to stderr plus top-level decision/reason (see
+        # emit_metrics). exit(2) preserved as the asyncRewake "force fix"
+        # signal — that's the documented mechanism.
+        emit_metrics({
+            "vulns_found": len(vulns),
+            "untracked_baseline_n": len(untracked_at_baseline),
+            "critical_count": sev["critical"],
+            "high_count": sev["high"],
+            "files_reviewed": len(diff_files),
+            "touched_paths_count": len(touched_paths),
+            "review_ms": review_ms,
+            "fire_index": fire_index,
+            **_stop_diff_truncated(),
+            **({"repo_resolution": repo_res} if res_metrics else {}),
+            **sweep_trimmed,
+            **({"diff_hdr_unparsed": len(gitutil._unparsed_diff_headers)}
+               if gitutil._unparsed_diff_headers else {}),
+            **({"secret_shaped_skipped": len(gitutil._secret_shaped_skipped)}
+               if gitutil._secret_shaped_skipped else {}),
+        }, rewake_summary=_format_vulns_summary(vulns),
+           additional_context=(PROVENANCE_BANNER + "\n\n"
+                               + concrete_guidance + no_record_note
+                               + ("\n\n" + left_out_notice[1] if left_out_notice else "")
+                               + CONTINUATION_SUFFIX + "\n"),
+           hook_event_name=hook_event_name)
+        sys.exit(2)
+
+    stop_review_failed = llm.last_review_failed()
+    if stop_review_failed:
+        debug_log(f"Stop hook: review got no verdict "
+                  f"({_review_failure_reason(llm.last_review_status())[1]})")
+        restore_unreviewed_stop_state(session_id, restore_paths, snap_baseline)
+    else:
+        debug_log("Stop hook: no security issues found")
+        if is_subagent:
+            record_reviewed_diff(session_id, diff_hash)
+    wake = _left_out_wake()
+    # CC keeps the first 20 metric keys (10 in older versions), in insertion
+    # order, after the keys emit_metrics puts first. The previous
+    # **sweep,**v2_metrics tail meant the 3 v2_metrics keys were always sliced
+    # off this most-common path, so the diff-strategy diagnostics never reached
+    # telemetry. Drop sweep here (it's PostToolUse-warning state, orthogonal to
+    # diff-strategy comparison).
+    emit_metrics({
+        **({"review_failed": True} if stop_review_failed else {}),
+        "vulns_found": 0,
+        "files_reviewed": len(diff_files),
+        "touched_paths_count": len(touched_paths),
+        "review_ms": review_ms,
+        "fire_index": fire_index,
+        **({"api_error": llm._last_call_claude_http_error} if llm._last_call_claude_http_error is not None else {}),
+        **_stop_diff_truncated(),
+        **v2_metrics,
+        **({"diff_hdr_unparsed": len(gitutil._unparsed_diff_headers)}
+           if gitutil._unparsed_diff_headers else {}),
+        **({"secret_shaped_skipped": len(gitutil._secret_shaped_skipped)}
+           if gitutil._secret_shaped_skipped else {}),
+    }, **wake)
+    sys.exit(2 if wake else 0)
+
+_SDK_BOOTSTRAP_THROTTLE = os.path.join(_resolve_state_dir(), ".sdk_bootstrap_spawned")
+
+def _maybe_bootstrap_agent_sdk_async():
+    """Fire-and-forget SDK bootstrap, for remote-pod environments.
+
+    Under CLAUDE_CODE_SYNC_PLUGIN_INSTALL=true (CCR-style remote pods),
+    plugins are synced *after* SessionStart fires, so the SessionStart
+    `ensure_agent_sdk.py` hook never runs and the agentic commit reviewer
+    falls back 100% of the time. A PostToolUse hook firing is itself proof
+    the plugin is now registered, so re-trigger the bootstrap here.
+    Detached, so the ~17s venv build never blocks the hook — the first
+    1-2 commits of a remote session still fall back while it builds, then
+    every subsequent commit gets the agentic path. ensure_agent_sdk.py
+    is idempotent and O_EXCL-locked, so concurrent/repeat spawns are safe;
+    the throttle file only avoids spawning dozens of subprocesses during
+    the build window. No-ops in ~10ms on local installs (SDK already
+    importable, or already installed under the state dir, which is not on
+    sys.path here) and when the environment turns the LLM reviews off.
+    """
+    try:
+        import importlib.util
+        if importlib.util.find_spec("antigravity_agent_sdk") is not None:
+            return
+        if llm_reviews_switched_off() or agent_sdk_installed(_resolve_state_dir()):
+            return
+        import time as _t
+        try:
+            if _t.time() - os.path.getmtime(_SDK_BOOTSTRAP_THROTTLE) < 300:
+                return
+        except OSError:
+            pass
+        make_state_dir(os.path.dirname(_SDK_BOOTSTRAP_THROTTLE))
+        # Touch the throttle BEFORE spawning so a burst of PostToolUse
+        # fires in the same second don't each spawn a subprocess.
+        open(_SDK_BOOTSTRAP_THROTTLE, "w").close()
+        script = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "ensure_agent_sdk.py")
+        subprocess.Popen(
+            [sys.executable, script],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL, start_new_session=True,
+        )
+    except Exception:
+        pass  # best-effort; never break the hook over a bootstrap attempt
+
+def main():
+    """Main hook function."""
+    debug_log(f"Hook called with args: {sys.argv}")
+    apply_safe_git_env()
+    remove_copies_on_termination()
+
+    # Master kill switch — honors ENABLE_SECURITY_REMINDER=0 (legacy) and
+    # SECURITY_GUIDANCE_DISABLE=1 (clearer name, no double negative). Emit
+    # empty metrics so asyncRewake hooks (Stop) don't hang waiting for stdout
+    # output that never comes.
+    if SECURITY_GUIDANCE_DISABLED:
+        emit_metrics({"skipped": True, "skip_reason": -1})
+        sys.exit(0)
+
+    # Periodically clean up old state files (10% chance per run)
+    if random.random() < 0.1:
+        cleanup_old_state_files()
+
+    # view_file input from stdin
+    try:
+        raw_input = sys.stdin.read()
+        input_data = json.loads(raw_input)
+    except json.JSONDecodeError as e:
+        debug_log(f"JSON decode error: {e}")
+        emit_metrics({"skipped": True, "skip_reason": -2})
+        sys.exit(0)
+
+    session_id = input_data.get("session_id", "default")
+    _USAGE_CONTEXT["session_id"] = re.sub(r"[^A-Za-z0-9_.-]", "_", str(session_id))[:80]
+    tool_name = input_data.get("tool_name", "")
+    tool_input = input_data.get("tool_input", {})
+    hook_event_name = input_data.get("hook_event_name", "")
+    debug_log(f"Processing: hook_event={hook_event_name}, tool={tool_name}")
+    if tool_name == "PowerShell":
+        # Same fields and same git commands as run_command: commit review and push sweep.
+        tool_name = "run_command"
+
+    # Load project-specific security guidance and custom patterns once
+    # per invocation. Failures are non-fatal (debug-logged) so a malformed
+    # config never prevents the built-in checks from running.
+    extensibility.load_for_session(input_data.get("cwd"))
+
+    # Remote-pod SDK-bootstrap rescue: PostToolUse is the earliest hook event
+    # that is guaranteed to fire *after* async plugin sync (its firing proves
+    # the plugin is registered), so it's where we recover the SessionStart
+    # bootstrap that remote pods miss under CLAUDE_CODE_SYNC_PLUGIN_INSTALL.
+    # Fires on replace_file_content/write_to_file too (not just run_command), so the venv is usually built
+    # before the first `git commit`.
+    if hook_event_name == "PostToolUse":
+        _maybe_bootstrap_agent_sdk_async()
+
+    # Handle UserPromptSubmit — capture git baseline
+    if hook_event_name == "UserPromptSubmit":
+        handle_user_prompt_submit(input_data)
+        return
+
+    # Handle Stop hook — final security check
+    if hook_event_name in ("Stop", "SubagentStop"):
+        handle_stop_hook(input_data)
+        return
+
+    # Handle PostToolUse[run_command] — commit review or push sweep (asyncRewake).
+    #
+    # hooks.json has three `if` configs under the run_command matcher (`git*commit*`,
+    # `git*push*` and `gt *`), kept to one per kind because CC runs EVERY
+    # entry when it cannot parse the command (loops, some substitutions): one
+    # entry per spelling meant one python per entry on those calls. CC
+    # evaluates each `if` independently and spawns this
+    # script ONCE PER MATCH — so `git commit -m x && git push` spawns python
+    # twice with the same command string and the same tool_use_id. The python
+    # cannot tell which `if` fired it, which is also why the three entries
+    # share one rewakeMessage.
+    #
+    # Routing therefore MUST check commit FIRST so that compound commit+push
+    # commands continue to hit commit-review (the pre-existing behaviour) on
+    # the commit-matcher invocation. The second spawn of the SAME compound
+    # command loses the tool_use_id sentinel race in `_claim_bash_hook_once`
+    # below, so commit-review runs exactly once. The alternative —
+    # checking push first — would silently DROP commit-review
+    # on `git commit && git push`, which is a regression.
+    #
+    # The push-matcher spawn then claims the "push" route and runs the push
+    # sweep, which reviews only when the command pushed a commit that
+    # commit-review will not see or gave no verdict on: once behind the
+    # upstream, no later push would cover it.
+    if tool_name == "run_command" and hook_event_name == "PostToolUse":
+        cmd = (input_data.get("tool_input") or {}).get("command", "") or ""
+        if not (_GIT_COMMIT_RE.search(cmd) or _GIT_PUSH_RE.search(cmd)):
+            # Measurement only: this start matched no commit or push. Count
+            # it, and say whether a plain text check could have told so before
+            # Python. Both values carry the sample weight, so they sum to
+            # estimates of all such starts.
+            if (input_data.get("tool_name") == "run_command" and _unmatched_bash_sampled(input_data)
+                    and not portable_output()):
+                skip = 0 if _shell_precheck_passes(raw_input) else _UNMATCHED_BASH_SAMPLE
+                emit_metrics({"bash_no_match": _UNMATCHED_BASH_SAMPLE, "precheck_skip": skip})
+            return
+        if not _shell_precheck_passes(raw_input):
+            # The text check would have dropped a command that is reviewed.
+            # Rides on whichever row this start emits; nothing is skipped.
+            global _precheck_miss
+            _precheck_miss = True
+        run_commit_review = bool(_GIT_COMMIT_RE.search(cmd))
+        if _claim_bash_hook_once(input_data):
+            pass
+        elif (run_commit_review and _GIT_PUSH_RE.search(cmd)
+              and _claim_bash_hook_once(input_data, "push")):
+            run_commit_review = False
+        else:
+            # Another spawn for this same tool_use_id already claimed the
+            # work (compound matched multiple `if` configs). Emit a single
+            # metric so telemetry can count how often the de-dupe kicks in.
+            dedup = {"bash_hook_dedup": True}
+            if _precheck_miss and not portable_output():
+                dedup = {"pv": _PV, "precheck_miss": 1, **dedup}
+            _write_hook_output({"metrics": dedup})
+            sys.exit(0)
+        if run_commit_review:
+            handle_commit_review_posttooluse(input_data)
+        else:
+            handle_push_sweep_posttooluse(input_data)
+        return
+
+    # Handle PostToolUse — pattern-based checks only (no LLM review per-edit)
+    if tool_name in ["replace_file_content", "write_to_file", "MultiEdit", "NotebookEdit"]:
+        file_path = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
+        if not file_path:
+            sys.exit(0)
+
+        # Skip plan files
+        plans_dir = os.path.expanduser("~/.gemini/config/plans")
+        if file_path.startswith(plans_dir):
+            sys.exit(0)
+
+        # Telemetry only: how this edit's custom rules are written.
+        rule_stats = None
+        if ENABLE_PATTERN_RULES:
+            try:
+                rule_stats = extensibility.edit_stats(file_path)
+            except Exception as e:
+                debug_log(f"custom rule stats failed: {e}")
+        record_touched_path(session_id, file_path, rule_stats)
+
+        content = extract_content_from_input(
+            tool_name, tool_input, input_data.get("tool_response"))
+
+        all_guidance = []
+        raw_pattern_matches = []
+        if ENABLE_PATTERN_RULES:
+            pattern_matches = check_patterns(file_path, content)
+            raw_pattern_matches = pattern_matches
+            if pattern_matches:
+                debug_log(f"Pattern matches for {file_path}: {[r for r, _ in pattern_matches]}")
+
+            # For write_to_file tool, filter out patterns that existed in the baseline version
+            # This prevents flagging pre-existing insecure patterns when Antigravity rewrites a file
+            if tool_name == "write_to_file" and pattern_matches:
+                cwd = os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
+                baseline_content = get_baseline_file_content(session_id, file_path, cwd)
+                if baseline_content is not None:
+                    baseline_matches = set(r for r, _ in check_patterns(file_path, baseline_content))
+                    pattern_matches = [(r, msg) for r, msg in pattern_matches if r not in baseline_matches]
+                    if pattern_matches:
+                        debug_log(f"New patterns (not in baseline): {[r for r, _ in pattern_matches]}")
+                    else:
+                        debug_log("All patterns existed in baseline, skipping")
+
+            if extensibility.slowest_regex >= extensibility.SLOW_REGEX_S:
+                diffstate.record_custom_rule_stats(
+                    session_id, {"cr_slow_ms": int(extensibility.slowest_regex * 1000)})
+
+            for rule_name, reminder in pattern_matches:
+                warning_key = f"{file_path}-{rule_name}"
+                if atomic_check_and_mark_warning(session_id, warning_key):
+                    all_guidance.append(reminder)
+
+            # Record matched rules as pending so the Stop-hook sweep can
+            # later tally fixed vs unresolved. Only runs when patterns match.
+            if pattern_matches:
+                record_pending_warnings(session_id, file_path,
+                                        [r for r, _ in pattern_matches])
+
+        # Emit metrics when raw patterns matched (even if all were baseline-suppressed
+        # or dedup'd — pattern_hits reflects warnings actually shown, may be 0).
+        # Gate on raw matches so clean edits don't flood the metrics event.
+        #   rule_id:   RuleId of the first raw match (values stay small/enumerable in telemetry)
+        #   rule_mask: bitmask of ALL raw matches — POPCOUNT gives raw hit count,
+        #              (mask >> N) & 1 tests for a specific rule
+        output = {}
+        if raw_pattern_matches:
+            raw_names = [r for r, _ in raw_pattern_matches]
+            output["metrics"] = {
+                "pattern_hits": len(all_guidance),
+                # User-defined patterns (rule_name="user:*") have no static
+                # RuleId; emit -1 so the metrics pipeline can distinguish.
+                "rule_id": int(_RULE_NAME_TO_ID.get(raw_names[0], -1)),
+                "rule_mask": rule_names_to_mask(raw_names),
+                **({"pv": _PV} if _PV else {}),
+                **_LAUNCHER_METRICS,
+            }
+        if all_guidance:
+            output["hookSpecificOutput"] = {
+                "hookEventName": "PostToolUse",
+                "additionalContext": PROVENANCE_TAG + "\n\n" + "\n\n".join(all_guidance),
+            }
+        # The LLM reviews are on but can't run: say so.
+        if (ENABLE_CODE_SECURITY_REVIEW and not HAS_API_CREDENTIALS
+                and (ENABLE_STOP_REVIEW or COMMIT_REVIEW_ENABLED
+                     or PUSH_SWEEP_ENABLED)):
+            notice = _no_credentials_notice(file_path, session_id)
+            if notice:
+                output["systemMessage"] = notice
+        if output:
+            _write_hook_output(output)
+
+    sys.exit(0)
+
+if __name__ == "__main__":
+    main()

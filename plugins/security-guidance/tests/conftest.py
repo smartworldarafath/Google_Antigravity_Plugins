@@ -1,10 +1,14 @@
 import http.server
+import io
 import json
 import os
+import struct
 import subprocess
 import sys
+import sysconfig
 import threading
 import time
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -64,6 +68,21 @@ VULN_PY = (
 )
 
 
+@pytest.fixture(autouse=True)
+def _no_project_folder(monkeypatch):
+    """The suite can itself be run by a session, which says where it started."""
+    monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _no_net_err_from_an_earlier_test():
+    """A hook is one process per event; tests that call it in-process share
+    the module's record of the last failed call."""
+    import _base
+    _base._USAGE["net_err"] = 0
+    yield
+
+
 @pytest.fixture
 def workspace(tmp_path):
     ws = tmp_path / "ws"
@@ -76,12 +95,18 @@ def workspace(tmp_path):
 class _Stub(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         n = int(self.headers.get("Content-Length") or 0)
-        if n:
-            self.rfile.read(n)
+        body = self.rfile.read(n).decode("utf-8", "replace") if n else ""
+        # Only the stub_api fixture keeps the request bodies.
+        if hasattr(self.server, "bodies"):
+            self.server.bodies.append(body)
         self.server.calls.append(self.path)
         if self.server.delay:
             time.sleep(self.server.delay)
-        if self.server.status == 200:
+        status = self.server.status
+        reviews = [c for c in self.server.calls if c.endswith("/v1/messages")]
+        if self.path.endswith("/v1/messages") and len(reviews) <= getattr(self.server, "fail_first", 0):
+            status = 400
+        if status == 200:
             vulns = list(self.server.vulns)
             body = json.dumps({
                 "id": "msg_stub", "type": "message", "role": "assistant",
@@ -92,7 +117,7 @@ class _Stub(http.server.BaseHTTPRequestHandler):
             }).encode()
         else:
             body = b'{"type":"error","error":{"type":"invalid_request_error","message":"stub"}}'
-        self.send_response(self.server.status)
+        self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -108,8 +133,10 @@ class _Stub(http.server.BaseHTTPRequestHandler):
 def stub_api():
     srv = http.server.HTTPServer(("127.0.0.1", 0), _Stub)
     srv.calls = []
+    srv.bodies = []
     srv.status = 200
     srv.delay = 0
+    srv.fail_first = 0  # the first N review requests are answered with 400
     srv.vulns = []
     t = threading.Thread(target=srv.serve_forever, daemon=True)
     t.start()
@@ -137,6 +164,9 @@ def hook_env(tmp_path, stub_api):
         "ANTHROPIC_BASE_URL": f"http://127.0.0.1:{stub_api.server_port}",
         "NO_PROXY": "*", "no_proxy": "*",
         "SG_AGENTIC_COMMIT_REVIEW": "0",
+        # Points the plugin at a claude that does not exist, so no hook test
+        # runs this machine's own claude.
+        "SG_AGENTIC_CLI_PATH": str(tmp_path / "no-claude"),
         "SECURITY_GUIDANCE_COMMIT_REVIEW": "on",
         "SG_PUSH_SWEEP": "on",
         "PYTHONDONTWRITEBYTECODE": "1",
@@ -277,17 +307,50 @@ def env(hook_env, gateway):
     return e
 
 
+def _windows_exe(script):
+    """`script` as the bytes of a Windows .exe: Windows starts neither a
+    `#!` file nor, without a shell, a .cmd with multi-line arguments. Built
+    the way pip builds a console script: its launcher stub, then the
+    interpreter to run, then a zip holding the script as __main__.py."""
+    distlib = pytest.importorskip("pip._vendor.distlib")
+    stub = "t%s%s.exe" % ("64" if struct.calcsize("P") == 8 else "32",
+                          "-arm" if sysconfig.get_platform() == "win-arm64" else "")
+    stub = os.path.join(os.path.dirname(distlib.__file__), stub)
+    if not os.path.isfile(stub):
+        pytest.skip(f"pip has no script launcher {os.path.basename(stub)}")
+    with open(stub, "rb") as f:
+        launcher = f.read()
+    python = f'"{sys.executable}"' if " " in sys.executable else sys.executable
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("__main__.py", script)
+    return launcher + f"#!{python}\n".encode("utf-8") + archive.getvalue()
+
+
+def write_cli(tmp_path, name, script):
+    """A stand-in for `claude` in `tmp_path` that runs the Python `script`;
+    returns its path."""
+    if os.name == "nt":
+        cli = tmp_path / f"{name}.exe"
+        cli.write_bytes(_windows_exe(script))
+    else:
+        cli = tmp_path / name
+        cli.write_text(f"#!{sys.executable}\n{script}")
+        cli.chmod(0o755)
+    return cli
+
+
 @pytest.fixture
 def failing_inner_cli(tmp_path):
     """An inner CLI that prints a warning on stderr and exits 1; the review
     then falls back to a single-shot call."""
-    cli = tmp_path / "claude"
-    cli.write_text("#!/bin/sh\necho 'claude.ai connectors are disabled' >&2\nexit 1\n")
-    cli.chmod(0o755)
-    return str(cli)
+    return str(write_cli(tmp_path, "claude", (
+        "import sys\n"
+        "sys.stderr.write('claude.ai connectors are disabled\\n')\n"
+        "sys.exit(1)\n")))
 
 
 @pytest.fixture
 def agentic_env(env, failing_inner_cli):
-    pytest.importorskip("claude_agent_sdk")
+    pytest.importorskip("antigravity_agent_sdk")
     return {**env, "SG_AGENTIC_COMMIT_REVIEW": "1", "SG_AGENTIC_CLI_PATH": failing_inner_cli}

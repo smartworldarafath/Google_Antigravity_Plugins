@@ -1,6 +1,6 @@
 # Iframe sandbox constraints
 
-MCP-app widgets run inside a sandboxed `<iframe>` in the host (Antigravity Desktop,
+MCP-app widgets run inside a sandboxed `<iframe>` in the host (Antigravity Studio,
 claude.ai). The sandbox and CSP attributes lock down what the widget can do.
 Every item below was observed failing with a silent blank iframe until the
 fix was applied — the error only appears in the iframe's own devtools console,
@@ -158,7 +158,7 @@ applyHostContext(app.getHostContext());
 
 ## Debugging
 
-The iframe has its own console. In Antigravity Desktop, open DevTools (view_file → Toggle
+The iframe has its own console. In Antigravity Studio, open DevTools (view_file → Toggle
 Developer Tools), then switch the context dropdown (top-left of the Console
 tab) from "top" to the widget's iframe. CSP violations, uncaught exceptions,
 and import errors all surface there — the host's main console stays silent.

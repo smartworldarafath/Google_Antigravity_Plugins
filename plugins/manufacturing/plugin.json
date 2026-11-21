@@ -1,0 +1,12 @@
+{
+  "name": "manufacturing",
+  "displayName": "Claude for Manufacturing",
+  "description": "The manufacturing plugin. Skills for the work a plant actually runs on: joining the exports and systems into one dataset, quoting make-to-order jobs from drawings, writing nonconformances and 8Ds, diagnosing breakdowns, and reporting the morning numbers. Works with Microsoft 365, Oracle NetSuite, Infor M3 and Autodesk Fusion once connected, connects anything else through custom-connector, and runs on scheduled file exports when a system has no connector at all. Install and then ask Antigravity to help you get onboarded.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Set us up: configure ERP, CAD, CMMS and plant exports",
+    "Run the morning plant pulse production report for yesterday",
+    "Diagnose machine breakdown from sensor window and work orders"
+  ]
+}

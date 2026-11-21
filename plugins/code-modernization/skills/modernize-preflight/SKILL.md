@@ -115,7 +115,11 @@ If `$target_stack` was given, prove it with a throwaway project, not a version
 string: in a scratch directory outside `legacy/$system` (`mktemp -d`), create the
 smallest project the stack allows, restore, build, run one passing test with its
 real package manager and test framework, then delete it. A target that cannot
-build here is a finding.
+build here is a finding. If it names a version, also report whether that version
+is still supported, looked up as
+`${ANTIGRAVITY_PLUGIN_ROOT}/references/target-versions.md` says (never from memory):
+out of support or ending soon is ⚠️ with the date and the supported alternative,
+unverified is ⚠️ with the page to check; neither is ever ❌ or changes a verdict.
 
 ## Check 4 — Source completeness
 
@@ -163,7 +167,7 @@ If `$system` is a standalone repository, one line saying so is the whole check.
 Every command is written never to edit `legacy/$system`, but that is only a convention until something enforces it.
 This check is **read-only**: never edit a settings file and never suggest loosening a permission. view_file whichever
 exist: the project's `.agents/settings.json` and `.claude/settings.local.json`, and the user settings
-(`~/.agents/settings.json`, or `settings.json` in `CLAUDE_CONFIG_DIR`).
+(`~/.agents/settings.json`, or `settings.json` in `ANTIGRAVITY_CONFIG_DIR`).
 
 In each `permissions.deny` list, look for an `replace_file_content` rule covering everything under `legacy/`: `replace_file_content(legacy/**)`,
 `replace_file_content(./legacy/**)`, `replace_file_content(**/legacy/**)`, `replace_file_content(/legacy/**)` (project files only; in user settings a leading `/`

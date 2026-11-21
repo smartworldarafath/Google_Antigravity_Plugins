@@ -1,7 +1,7 @@
 {
   "name": "receipts",
   "displayName": "Receipts",
-  "description": "Receipts integration and capabilities for Google Antigravity.",
+  "description": "A personal Google Antigravity impact report for justifying your usage to a manager or a self-review: what you shipped, which projects it went to, and each project's share of your usage. Reads your ~/.gemini/config/projects transcripts and runs read-only git locally; only counts and project names are sent to write it up, and the report stays on your machine.",
   "version": "1.0.0",
   "logo": "assets/logo.svg",
   "suggestedPrompts": [

@@ -2,7 +2,7 @@
   "name": "hookify",
   "displayName": "Hookify",
   "description": "Easily create hooks to prevent unwanted behaviors by analyzing conversation patterns",
-  "version": "1.0.0",
+  "version": "0.1.1",
   "logo": "assets/logo.svg",
   "suggestedPrompts": [
     "Run diagnostics and inspect Hookify capabilities",

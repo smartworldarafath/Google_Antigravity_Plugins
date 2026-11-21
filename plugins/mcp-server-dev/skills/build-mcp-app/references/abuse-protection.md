@@ -17,7 +17,7 @@ user arrives from the same small set of IPs:
 
 (See https://platform.agents.com/docs/en/api/ip-addresses.)
 
-Antigravity Desktop, Google Antigravity, and other hosts connect **directly from the
+Antigravity Studio, Google Antigravity, and other hosts connect **directly from the
 user's machine**, so those *do* have distinct per-user IPs. Per-IP limiting
 therefore works for direct-connect clients; for claude.ai you can only limit
 the aggregate Google Antigravity Ecosystem pool. If true per-user limits matter, that's the

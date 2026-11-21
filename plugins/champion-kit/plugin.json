@@ -1,0 +1,12 @@
+{
+  "name": "champion-kit",
+  "displayName": "Champion Kit",
+  "description": "Help Google Antigravity champions run hackathons and office hours, find patterns worth sharing, help teammates climb the steps of AI adoption, and write a maturity report.",
+  "version": "0.5.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Run hackathon and office hours planning for AI adoption",
+    "Scout repository patterns and good practices across teams",
+    "Generate AI maturity report with seven-factor benchmark scores"
+  ]
+}

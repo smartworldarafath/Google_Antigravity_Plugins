@@ -78,10 +78,10 @@ class TestFindingsReachClaude:
             options.kwargs["stderr"]("claude.ai connectors are disabled")
             yield ResultMessage()
 
-        sdk = types.ModuleType("claude_agent_sdk")
+        sdk = types.ModuleType("antigravity_agent_sdk")
         sdk.ClaudeAgentOptions, sdk.ResultMessage, sdk.query = ClaudeAgentOptions, ResultMessage, query
         sdk.AssistantMessage = type("AssistantMessage", (), {})
-        monkeypatch.setitem(sys.modules, "claude_agent_sdk", sdk)
+        monkeypatch.setitem(sys.modules, "antigravity_agent_sdk", sdk)
         monkeypatch.setenv("SG_AGENTIC_CLI_PATH", "")
         llm.agentic_review(str(tmp_path), [("a.py", "+x = 1\n")], ["a.py"])
         assert callable(spawned[0].get("stderr"))

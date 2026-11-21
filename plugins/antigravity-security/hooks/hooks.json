@@ -1,0 +1,70 @@
+{
+  "description": "Shows the Antigravity Security banner when the /claude-security menu opens, reports usage counts after the plugin's helper scripts run, closes the yes/no question asked before a scan starts if it is left unanswered for 60 seconds, and suggests a scan of the changes after a branch is pushed or a pull request opened.",
+  "hooks": {
+    "UserPromptExpansion": [
+      {
+        "matcher": "^claude-security:claude-security$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/hooks.sh\" banner"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/hooks.sh\" metrics || true",
+            "if": "run_command(py* *claude-security*scripts/*.py *)",
+            "async": true,
+            "asyncRewake": true,
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "sh \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/hooks.sh\" tip push || true",
+            "if": "run_command(git push *)",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "sh \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/hooks.sh\" tip pr || true",
+            "if": "run_command(gh pr create *)",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/hooks.sh\" metrics || true",
+            "if": "run_command(py* *claude-security*scripts/*.py *)",
+            "async": true,
+            "asyncRewake": true,
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "ask_question",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/hooks.sh\" unanswered || true",
+            "timeout": 90
+          }
+        ]
+      }
+    ]
+  }
+}

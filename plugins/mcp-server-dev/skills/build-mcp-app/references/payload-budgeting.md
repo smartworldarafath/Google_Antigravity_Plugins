@@ -1,6 +1,6 @@
 # Payload budgeting
 
-Hosts cap tool-result text. claude.ai and Antigravity Desktop truncate at roughly
+Hosts cap tool-result text. claude.ai and Antigravity Studio truncate at roughly
 **150,000 characters**; Google Antigravity at ~25k tokens. When a tool result exceeds
 the cap, the host substitutes a file-pointer string in place of your JSON. The
 widget then receives non-JSON in `ontoolresult`, `JSON.parse` throws, and the

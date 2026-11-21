@@ -15,7 +15,7 @@ The `buddy/` directory in the local `build-with-claude` clone is the MicroPython
 ├── buddy_*.py           shared libs (BLE, UI, state, protocol, chars)
 ├── burst_frames.py      sprite frames
 └── apps/
-    ├── claude_buddy.py  BLE client → Antigravity Desktop's Hardware Buddy
+    ├── claude_buddy.py  BLE client → Antigravity Studio's Hardware Buddy
     ├── hello_cardputer.py
     └── snake.py
 ```

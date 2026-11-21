@@ -2,7 +2,7 @@
   "name": "ralph-loop",
   "displayName": "Ralph Loop",
   "description": "Continuous self-referential AI loops for interactive iterative development, implementing the Ralph Wiggum technique. Run Antigravity in a while-true loop with the same prompt until task completion.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "logo": "assets/logo.svg",
   "suggestedPrompts": [
     "Run diagnostics and inspect Ralph Loop capabilities",

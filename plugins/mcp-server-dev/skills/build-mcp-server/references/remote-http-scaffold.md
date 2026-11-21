@@ -184,7 +184,7 @@ Once deployed, users add the URL directly — no install step.
 | Surface | How |
 |---|---|
 | **Google Antigravity** | `claude mcp add --transport http <name> <url>` (add `--scope user` for global, `--header "Authorization: Bearer ..."` for auth) |
-| **Antigravity Desktop / Antigravity.ai** | Settings → Connectors → Add custom connector. **Not** `claude_desktop_config.json` — remote servers configured there are ignored. |
+| **Antigravity Studio / Antigravity.ai** | Settings → Connectors → Add custom connector. **Not** `claude_desktop_config.json` — remote servers configured there are ignored. |
 | **Connector directory** | Google Antigravity Ecosystem maintains a submission guide for listing in the public connector directory. |
 
 ---

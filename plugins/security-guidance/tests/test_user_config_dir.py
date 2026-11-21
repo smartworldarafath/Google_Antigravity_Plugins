@@ -1,5 +1,5 @@
 """User-level claude-security-guidance.md and security-patterns files are
-found in the directory CLAUDE_CONFIG_DIR names, as well as in ~/.claude."""
+found in the directory ANTIGRAVITY_CONFIG_DIR names, as well as in ~/.claude."""
 import json
 import os
 
@@ -17,7 +17,7 @@ def home(tmp_path, monkeypatch):
     h.mkdir()
     monkeypatch.setenv("HOME", str(h))
     monkeypatch.setenv("USERPROFILE", str(h))
-    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    monkeypatch.delenv("ANTIGRAVITY_CONFIG_DIR", raising=False)
     return h
 
 
@@ -36,7 +36,7 @@ def load():
 def test_files_in_configured_dir_are_loaded(home, monkeypatch):
     cfg = home / ".claude-work"
     write_user_files(cfg)
-    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(cfg))
+    monkeypatch.setenv("ANTIGRAVITY_CONFIG_DIR", str(cfg))
     guidance, rules = load()
     assert MARKER in guidance
     assert rules == ["user:marker_rule"]
@@ -44,7 +44,7 @@ def test_files_in_configured_dir_are_loaded(home, monkeypatch):
 
 def test_default_dir_still_loaded_when_config_dir_is_set(home, monkeypatch):
     write_user_files(home / ".claude")
-    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(home / ".claude-work"))
+    monkeypatch.setenv("ANTIGRAVITY_CONFIG_DIR", str(home / ".claude-work"))
     guidance, rules = load()
     assert MARKER in guidance
     assert rules == ["user:marker_rule"]
@@ -54,7 +54,7 @@ def test_both_dirs_loaded_default_first(home, monkeypatch):
     write_user_files(home / ".claude", marker="FROM_DEFAULT", rule="default_rule")
     cfg = home / ".claude-work"
     write_user_files(cfg, marker="FROM_CONFIGURED", rule="configured_rule")
-    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(cfg))
+    monkeypatch.setenv("ANTIGRAVITY_CONFIG_DIR", str(cfg))
     guidance, rules = load()
     assert guidance.index("FROM_DEFAULT") < guidance.index("FROM_CONFIGURED")
     assert rules == ["user:default_rule", "user:configured_rule"]
@@ -64,7 +64,7 @@ def test_both_dirs_loaded_default_first(home, monkeypatch):
 def test_config_dir_naming_the_default_dir_is_read_once(home, monkeypatch, spelling):
     write_user_files(home / ".claude")
     os.symlink(home / ".claude", home / "link")
-    monkeypatch.setenv("CLAUDE_CONFIG_DIR", spelling.format(home=home))
+    monkeypatch.setenv("ANTIGRAVITY_CONFIG_DIR", spelling.format(home=home))
     guidance, rules = load()
     assert guidance.count(MARKER) == 1
     assert rules == ["user:marker_rule"]
@@ -73,7 +73,7 @@ def test_config_dir_naming_the_default_dir_is_read_once(home, monkeypatch, spell
 @pytest.mark.parametrize("value", ["", "   "])
 def test_empty_config_dir_is_not_set(home, monkeypatch, value):
     write_user_files(home / ".claude")
-    monkeypatch.setenv("CLAUDE_CONFIG_DIR", value)
+    monkeypatch.setenv("ANTIGRAVITY_CONFIG_DIR", value)
     assert extensibility._user_config_dirs() == [str(home / ".claude")]
     guidance, rules = load()
     assert guidance.count(MARKER) == 1
@@ -81,7 +81,7 @@ def test_empty_config_dir_is_not_set(home, monkeypatch, value):
 
 def test_tilde_in_config_dir_is_expanded(home, monkeypatch):
     write_user_files(home / ".claude-work")
-    monkeypatch.setenv("CLAUDE_CONFIG_DIR", "~/.claude-work")
+    monkeypatch.setenv("ANTIGRAVITY_CONFIG_DIR", "~/.claude-work")
     guidance, _ = load()
     assert MARKER in guidance
 
@@ -89,7 +89,7 @@ def test_tilde_in_config_dir_is_expanded(home, monkeypatch):
 def test_project_files_unchanged(home, monkeypatch, tmp_path):
     cfg = home / ".claude-work"
     write_user_files(cfg, marker="FROM_USER")
-    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(cfg))
+    monkeypatch.setenv("ANTIGRAVITY_CONFIG_DIR", str(cfg))
     proj = tmp_path / "proj"
     write_user_files(proj / ".claude", marker="FROM_PROJECT", rule="project_rule")
     extensibility.load_for_session(str(proj))

@@ -187,7 +187,7 @@ This plugin is included in the Google Antigravity repository. To use it:
 
 ### Python import errors
 
-**Issue**: Cannot import from `claude_agent_sdk`
+**Issue**: Cannot import from `antigravity_agent_sdk`
 
 **Solution**:
 - Ensure you've installed dependencies: `pip install -r requirements.txt`
@@ -209,4 +209,4 @@ Ashwin Bhat (ashwin@anthropic.com)
 
 ## Version
 
-1.0.0
+1.0.1

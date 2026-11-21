@@ -7,13 +7,13 @@
     "name": "smartworldarafath",
     "url": "https://github.com/smartworldarafath/Google_Antigravity_Plugins"
   },
-  "totalPlugins": 54,
+  "totalPlugins": 57,
   "plugins": [
     {
       "name": "agent-sdk-dev",
       "displayName": "Agent Sdk Dev",
       "description": "Antigravity Agent SDK Development Plugin",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "source": "./plugins/agent-sdk-dev",
       "logo": "plugins/agent-sdk-dev/assets/logo.svg",
       "suggestedPrompts": [
@@ -38,7 +38,7 @@
       "name": "antigravity-plugin-dev",
       "displayName": "Antigravity Plugin Dev",
       "description": "Plugin development toolkit with skills for creating agents, commands, hooks, MCP integrations, and comprehensive plugin structure guidance",
-      "version": "1.0.0",
+      "version": "0.1.2",
       "source": "./plugins/antigravity-plugin-dev",
       "logo": "plugins/antigravity-plugin-dev/assets/logo.svg",
       "suggestedPrompts": [
@@ -167,6 +167,36 @@
       }
     },
     {
+      "name": "champion-kit",
+      "displayName": "Champion Kit",
+      "description": "Help Google Antigravity champions run hackathons and office hours, find patterns worth sharing, help teammates climb the steps of AI adoption, and write a maturity report.",
+      "version": "0.5.0",
+      "source": "./plugins/champion-kit",
+      "logo": "plugins/champion-kit/assets/logo.svg",
+      "suggestedPrompts": [
+        "Run hackathon and office hours planning for AI adoption",
+        "Scout repository patterns and good practices across teams",
+        "Generate AI maturity report with seven-factor benchmark scores"
+      ],
+      "capabilities": {
+        "skills": [
+          "climb",
+          "faq",
+          "hackathon",
+          "maturity",
+          "office-hours",
+          "patterns",
+          "routines"
+        ],
+        "agents": [
+          "repo-scout"
+        ],
+        "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
       "name": "clangd-lsp",
       "displayName": "C/C++ Language Server (Clangd)",
       "description": "C/C++ language server (clangd) integration for Google Antigravity, providing AST diagnostics, code intelligence, and formatting.",
@@ -192,7 +222,7 @@
       "name": "code-modernization",
       "displayName": "Code Modernization",
       "description": "Guided modernization for any legacy codebase: start with /modernize, get an assessment, an interactive map, the business rules mined from the code, and a plan you approve, then an upgrade, a rewrite or a rebuild with independent proof that the new code behaves like the old. Includes security hardening, a one-page report, specialist agents, and an optional live progress pane (early access).",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "source": "./plugins/code-modernization",
       "logo": "plugins/code-modernization/assets/logo.svg",
       "suggestedPrompts": [
@@ -235,7 +265,7 @@
       "name": "code-review",
       "displayName": "Code Review",
       "description": "Automated code review for pull requests using multiple specialized agents with confidence-based scoring",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "source": "./plugins/code-review",
       "logo": "plugins/code-review/assets/logo.svg",
       "suggestedPrompts": [
@@ -279,7 +309,7 @@
       "name": "commit-commands",
       "displayName": "Commit Commands",
       "description": "Streamline your git workflow with simple commands for committing, pushing, and creating pull requests",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "source": "./plugins/commit-commands",
       "logo": "plugins/commit-commands/assets/logo.svg",
       "suggestedPrompts": [
@@ -369,7 +399,7 @@
       "name": "discord",
       "displayName": "Discord",
       "description": "Discord channel for Google Antigravity — messaging bridge with built-in access control. Manage pairing, allowlists, and policy via /discord:access.",
-      "version": "0.0.4",
+      "version": "0.0.6",
       "source": "./plugins/discord",
       "logo": "plugins/discord/assets/logo.svg",
       "suggestedPrompts": [
@@ -415,7 +445,7 @@
       "name": "explanatory-output-style",
       "displayName": "Explanatory Output Style",
       "description": "Adds educational insights about implementation choices and codebase patterns (mimics the deprecated Explanatory output style)",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "source": "./plugins/explanatory-output-style",
       "logo": "plugins/explanatory-output-style/assets/logo.svg",
       "suggestedPrompts": [
@@ -455,7 +485,7 @@
       "name": "feature-dev",
       "displayName": "Feature Dev",
       "description": "Comprehensive feature development workflow with specialized agents for codebase exploration, architecture design, and quality review",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "source": "./plugins/feature-dev",
       "logo": "plugins/feature-dev/assets/logo.svg",
       "suggestedPrompts": [
@@ -501,7 +531,7 @@
       "name": "frontend-design",
       "displayName": "Frontend Design",
       "description": "Frontend design skill for UI/UX implementation",
-      "version": "1.0.0",
+      "version": "1.1.1",
       "source": "./plugins/frontend-design",
       "logo": "plugins/frontend-design/assets/logo.svg",
       "suggestedPrompts": [
@@ -585,7 +615,7 @@
       "name": "hookify",
       "displayName": "Hookify",
       "description": "Easily create hooks to prevent unwanted behaviors by analyzing conversation patterns",
-      "version": "1.0.0",
+      "version": "0.1.1",
       "source": "./plugins/hookify",
       "logo": "plugins/hookify/assets/logo.svg",
       "suggestedPrompts": [
@@ -700,7 +730,7 @@
       "name": "learning-output-style",
       "displayName": "Learning Output Style",
       "description": "Interactive learning mode that requests meaningful code contributions at decision points (mimics the unshipped Learning output style)",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "source": "./plugins/learning-output-style",
       "logo": "plugins/learning-output-style/assets/logo.svg",
       "suggestedPrompts": [
@@ -754,6 +784,44 @@
         ],
         "agents": [],
         "hasMcp": false,
+        "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "manufacturing",
+      "displayName": "Claude for Manufacturing",
+      "description": "The manufacturing plugin. Skills for the work a plant actually runs on: joining the exports and systems into one dataset, quoting make-to-order jobs from drawings, writing nonconformances and 8Ds, diagnosing breakdowns, and reporting the morning numbers. Works with Microsoft 365, Oracle NetSuite, Infor M3 and Autodesk Fusion once connected, connects anything else through custom-connector, and runs on scheduled file exports when a system has no connector at all. Install and then ask Antigravity to help you get onboarded.",
+      "version": "1.0.0",
+      "source": "./plugins/manufacturing",
+      "logo": "plugins/manufacturing/assets/logo.svg",
+      "suggestedPrompts": [
+        "Set us up: configure ERP, CAD, CMMS and plant exports",
+        "Run the morning plant pulse production report for yesterday",
+        "Diagnose machine breakdown from sensor window and work orders"
+      ],
+      "capabilities": {
+        "skills": [
+          "breakdown-diagnosis",
+          "breakdown-to-next-report",
+          "custom-connector",
+          "customer-inquiry-intake",
+          "daily-production-report",
+          "data-consolidate",
+          "design-space-explore",
+          "inspection-to-capa",
+          "morning-plant-pulse",
+          "ncr-writeup",
+          "onboarding",
+          "quote-build",
+          "rfq-to-quote",
+          "root-cause-capa",
+          "supplier-escape-to-alternate-source",
+          "supplier-quote-request",
+          "trade-study-report"
+        ],
+        "agents": [],
+        "hasMcp": true,
         "hasHooks": false,
         "hasRules": true
       }
@@ -921,7 +989,7 @@
       "name": "pr-review-toolkit",
       "displayName": "Pr Review Toolkit",
       "description": "Comprehensive PR review agents specializing in comments, tests, error handling, type design, code quality, and code simplification",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "source": "./plugins/pr-review-toolkit",
       "logo": "plugins/pr-review-toolkit/assets/logo.svg",
       "suggestedPrompts": [
@@ -994,7 +1062,7 @@
       "name": "ralph-loop",
       "displayName": "Ralph Loop",
       "description": "Continuous self-referential AI loops for interactive iterative development, implementing the Ralph Wiggum technique. Run Antigravity in a while-true loop with the same prompt until task completion.",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "source": "./plugins/ralph-loop",
       "logo": "plugins/ralph-loop/assets/logo.svg",
       "suggestedPrompts": [
@@ -1017,7 +1085,7 @@
     {
       "name": "receipts",
       "displayName": "Receipts",
-      "description": "Receipts integration and capabilities for Google Antigravity.",
+      "description": "A personal Google Antigravity impact report for justifying your usage to a manager or a self-review: what you shipped, which projects it went to, and each project's share of your usage. Reads your ~/.gemini/config/projects transcripts and runs read-only git locally; only counts and project names are sent to write it up, and the report stays on your machine.",
       "version": "1.0.0",
       "source": "./plugins/receipts",
       "logo": "plugins/receipts/assets/logo.svg",
@@ -1084,7 +1152,7 @@
       "name": "security-guidance",
       "displayName": "Security Guidance",
       "description": "Security review for Antigravity-generated code. Pattern-based warnings on edits, LLM-powered diff review on Stop, and an agentic commit reviewer that catches injection, XSS, SSRF, hardcoded secrets, and 25+ other vulnerability classes.",
-      "version": "2.0.14",
+      "version": "2.0.21",
       "source": "./plugins/security-guidance",
       "logo": "plugins/security-guidance/assets/logo.svg",
       "suggestedPrompts": [
@@ -1123,7 +1191,7 @@
     {
       "name": "session-report",
       "displayName": "Session Report",
-      "description": "Session Report integration and capabilities for Google Antigravity.",
+      "description": "Generate an explorable HTML report of Google Antigravity session usage — tokens, cache efficiency, subagents, skills, and the most expensive prompts — from local ~/.gemini/config/projects transcripts.",
       "version": "1.0.0",
       "source": "./plugins/session-report",
       "logo": "plugins/session-report/assets/logo.svg",
@@ -1226,6 +1294,26 @@
         "agents": [],
         "hasMcp": true,
         "hasHooks": false,
+        "hasRules": true
+      }
+    },
+    {
+      "name": "theme-examples",
+      "displayName": "Theme Examples",
+      "description": "An example plugin to read, copy and change: thirty-eight animated backdrops behind the chat in the desktop app, with frosted-glass panels: one per project or per session. /custom-theme list names them. Fireworks go off over the theme when Antigravity says \"merged\"; /fireworks sets them off by hand.",
+      "version": "0.6.0",
+      "source": "./plugins/theme-examples",
+      "logo": "plugins/theme-examples/assets/logo.svg",
+      "suggestedPrompts": [
+        "Explore 38 animated interactive canvas backdrops and scenes",
+        "Apply frosted glass theme backdrop to current workspace",
+        "Configure visual canvas sounds and interactive particles"
+      ],
+      "capabilities": {
+        "skills": [],
+        "agents": [],
+        "hasMcp": false,
+        "hasHooks": true,
         "hasRules": true
       }
     },

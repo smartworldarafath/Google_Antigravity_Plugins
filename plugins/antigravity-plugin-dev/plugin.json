@@ -2,7 +2,7 @@
   "name": "antigravity-plugin-dev",
   "displayName": "Antigravity Plugin Dev",
   "description": "Plugin development toolkit with skills for creating agents, commands, hooks, MCP integrations, and comprehensive plugin structure guidance",
-  "version": "1.0.0",
+  "version": "0.1.2",
   "logo": "assets/logo.svg",
   "suggestedPrompts": [
     "Run diagnostics and inspect Antigravity Plugin Dev capabilities",

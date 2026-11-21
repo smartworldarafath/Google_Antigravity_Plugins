@@ -2,7 +2,7 @@
   "name": "commit-commands",
   "displayName": "Commit Commands",
   "description": "Streamline your git workflow with simple commands for committing, pushing, and creating pull requests",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "logo": "assets/logo.svg",
   "suggestedPrompts": [
     "Run diagnostics and inspect Commit Commands capabilities",

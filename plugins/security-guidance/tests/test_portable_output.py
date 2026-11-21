@@ -109,7 +109,7 @@ script, sdk, old_py = sys.argv[1:4]
 sys.path.insert(0, os.path.dirname(script))
 real = importlib.util.find_spec
 def find_spec(name, *a, **k):
-    if name == "claude_agent_sdk":
+    if name == "antigravity_agent_sdk":
         return object() if sdk == "present" else None
     return real(name, *a, **k)
 importlib.util.find_spec = find_spec

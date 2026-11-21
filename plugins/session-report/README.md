@@ -3,7 +3,7 @@
 > Production Google Antigravity Plugin
 
 ## Overview
-Session Report integration and capabilities for Google Antigravity.
+Generate an explorable HTML report of Google Antigravity session usage — tokens, cache efficiency, subagents, skills, and the most expensive prompts — from local ~/.gemini/config/projects transcripts.
 
 ## Features
 - **Skills**: Specialized workflows and on-demand procedures.

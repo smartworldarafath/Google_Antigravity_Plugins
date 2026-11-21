@@ -12,7 +12,7 @@ policy. The server reads both files at boot.
 per-project setups):
 
 ```bash
-echo "${TELEGRAM_STATE_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/channels/telegram}"
+echo "${TELEGRAM_STATE_DIR:-${ANTIGRAVITY_CONFIG_DIR:-$HOME/.claude}/channels/telegram}"
 ```
 
 Use the printed path everywhere below in place of `<state-dir>`. The default

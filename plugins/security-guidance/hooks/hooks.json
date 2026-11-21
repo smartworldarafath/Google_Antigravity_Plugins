@@ -1,0 +1,101 @@
+{
+  "description": "Security guidance plugin — pattern-based warnings on edits, git-diff-based LLM review on stop",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/sg-python.sh\" \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/ensure_agent_sdk.py\"",
+            "timeout": 180
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/sg-python.sh\" \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/security_reminder_hook.py\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/sg-python.sh\" \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/security_reminder_hook.py\"",
+            "timeout": 60
+          }
+        ],
+        "matcher": "replace_file_content|write_to_file|MultiEdit|NotebookEdit"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/sg-python.sh\" \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/security_reminder_hook.py\"",
+            "if": "run_command(git*commit*)",
+            "asyncRewake": true,
+            "rewakeMessage": "Background security review of committed or pushed changes — address or acknowledge the findings below, then continue with the user's original request or continue waiting for their reply:",
+            "rewakeSummary": "Security review found issues"
+          },
+          {
+            "type": "command",
+            "command": "bash \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/sg-python.sh\" \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/security_reminder_hook.py\"",
+            "if": "run_command(git*push*)",
+            "asyncRewake": true,
+            "rewakeMessage": "Background security review of committed or pushed changes — address or acknowledge the findings below, then continue with the user's original request or continue waiting for their reply:",
+            "rewakeSummary": "Security review found issues"
+          },
+          {
+            "type": "command",
+            "command": "bash \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/sg-python.sh\" \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/security_reminder_hook.py\"",
+            "if": "run_command(gt *)",
+            "asyncRewake": true,
+            "rewakeMessage": "Background security review of committed or pushed changes — address or acknowledge the findings below, then continue with the user's original request or continue waiting for their reply:",
+            "rewakeSummary": "Security review found issues"
+          }
+        ],
+        "matcher": "run_command"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/sg-python.sh\" \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/security_reminder_hook.py\"",
+            "if": "PowerShell(git*commit*)",
+            "asyncRewake": true,
+            "rewakeMessage": "Background security review of committed or pushed changes — address or acknowledge the findings below, then continue with the user's original request or continue waiting for their reply:",
+            "rewakeSummary": "Security review found issues"
+          },
+          {
+            "type": "command",
+            "command": "bash \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/sg-python.sh\" \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/security_reminder_hook.py\"",
+            "if": "PowerShell(git*push*)",
+            "asyncRewake": true,
+            "rewakeMessage": "Background security review of committed or pushed changes — address or acknowledge the findings below, then continue with the user's original request or continue waiting for their reply:",
+            "rewakeSummary": "Security review found issues"
+          }
+        ],
+        "matcher": "PowerShell"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/sg-python.sh\" \"${ANTIGRAVITY_PLUGIN_ROOT}/hooks/security_reminder_hook.py\"",
+            "asyncRewake": true,
+            "rewakeMessage": "Background security review feedback — address or acknowledge the findings below, then continue with the user's original request or continue waiting for their reply. This is supplementary, not a replacement for your previous response:",
+            "rewakeSummary": "Background security review found issues"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -26,7 +26,7 @@ Your verification should prioritize SDK functionality and best practices over ge
 
 3. **SDK Usage and Patterns**:
 
-   - Verify correct imports from `claude_agent_sdk` (or appropriate SDK module)
+   - Verify correct imports from `antigravity_agent_sdk` (or appropriate SDK module)
    - Check that agents are properly initialized according to SDK docs
    - Validate that agent configuration follows SDK patterns (system prompts, models, etc.)
    - Ensure SDK methods are called correctly with proper parameters
