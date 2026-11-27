@@ -1,0 +1,21 @@
+{
+  "name": "open-agentic-web-plugin",
+  "displayName": "Open Agentic Web & TripSteward DevTools",
+  "version": "1.2.0",
+  "description": "Antigravity plugin for validating, scaffolding, and executing actions across federated Open Agentic Web nodes adhering to Cognizant / Mozilla / MIT NANDA MVP Profile 0.3.",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Validate our Open Agentic Web nodes using oaw_validate_node",
+    "Audit the federated travel concierge mesh between TripSteward, CityGlide, and MetroPass",
+    "Generate an Agent-to-Agent (A2A) agent.json card for HarborView Hotel"
+  ],
+  "author": {
+    "name": "TripSteward & Open Agentic Web Community"
+  },
+  "homepage": "https://github.com/Elroi-thecreator/tripsteward-agentic-travel",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Elroi-thecreator/tripsteward-agentic-travel"
+  },
+  "license": "Apache-2.0"
+}

@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "open-agentic-web": {
+      "command": "node",
+      "args": [
+        "${workspaceRoot}/plugins/open-agentic-web-plugin/bin/mcp-launcher.mjs"
+      ]
+    }
+  }
+}
