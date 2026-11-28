@@ -21,6 +21,41 @@
 
 ---
 
+
+<div align="center">
+
+### 🛠️ Languages & Tech Stack
+
+<p>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/smartworldarafath/smartworldarafath/main/assets/readme/dark/pill-python.svg" />
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/smartworldarafath/smartworldarafath/main/assets/readme/light/pill-python.svg" />
+    <img src="https://raw.githubusercontent.com/smartworldarafath/smartworldarafath/main/assets/readme/dark/pill-python.svg" alt="Python" />
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/smartworldarafath/smartworldarafath/main/assets/readme/dark/pill-ts.svg" />
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/smartworldarafath/smartworldarafath/main/assets/readme/light/pill-ts.svg" />
+    <img src="https://raw.githubusercontent.com/smartworldarafath/smartworldarafath/main/assets/readme/dark/pill-ts.svg" alt="TypeScript" />
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/smartworldarafath/smartworldarafath/main/assets/readme/dark/pill-html.svg" />
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/smartworldarafath/smartworldarafath/main/assets/readme/light/pill-html.svg" />
+    <img src="https://raw.githubusercontent.com/smartworldarafath/smartworldarafath/main/assets/readme/dark/pill-html.svg" alt="HTML5" />
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/smartworldarafath/smartworldarafath/main/assets/readme/dark/pill-js.svg" />
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/smartworldarafath/smartworldarafath/main/assets/readme/light/pill-js.svg" />
+    <img src="https://raw.githubusercontent.com/smartworldarafath/smartworldarafath/main/assets/readme/dark/pill-js.svg" alt="JavaScript" />
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/smartworldarafath/smartworldarafath/main/assets/readme/dark/pill-shell.svg" />
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/smartworldarafath/smartworldarafath/main/assets/readme/light/pill-shell.svg" />
+    <img src="https://raw.githubusercontent.com/smartworldarafath/smartworldarafath/main/assets/readme/dark/pill-shell.svg" alt="Shell" />
+  </picture>
+</p>
+
+</div>
+
 ## 🌟 Overview
 
 **`Google_Antigravity_Plugins`** is a curated, production-grade directory containing **57 verified plugins** natively built and optimized for **Google Antigravity**.
